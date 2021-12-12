@@ -37,11 +37,11 @@ const boleto = {
   boleto: {
     numeroDocumento: '1001',
     especieDocumento: 'DM',
-    valor: 110.00,
+    valor: 10.00,
     datas: {
-      vencimento: '02-04-2020',
-      processamento: '02-04-2019',
-      documentos: '02-04-2019'
+      vencimento: '02-04-2021',
+      processamento: '02-04-2021',
+      documentos: '02-04-2021'
     }
   }
 };
@@ -49,9 +49,11 @@ const boleto = {
 const novoBoleto = new Boletos(boleto);
 novoBoleto.gerarBoleto();
 
-novoBoleto.pdfFile().then(async ({ stream }) => {
+novoBoleto.pdfFile().then(async ( stream ) => {
   // ctx.res.set('Content-type', 'application/pdf');	
-  await streamToPromise(stream);
+
+  console.log(typeof stream)
+  //await streamToPromise(stream);
 }).catch((error) => {
   return error;
 });
