@@ -22,7 +22,22 @@ function requireBoletoModules() {
 	return libBoletos;
 }
 
+function logFileName() {
+	var date = new Date();
+	var month = `${date.getMonth() + 1}`;
+	var day = `${date.getDate()}`;
+	var mm = `${date.getMinutes()}`
+	var ss = date.getSeconds()
+	return `${date.getFullYear()}-${month.padStart(2, '0')}-${day.padStart(2, '0')}_${mm.padStart(2, '0')}-${ss.padStart(2, '0')}.log`
+}
 
+function writeLog(append) {
+
+	var fs = require('fs');
+	var filePath = require("path").resolve(__dirname, logFileName())
+	fs.appendFileSync(filePath, '\n---' + append)
+
+}
 /**
  * Convert json to x3csv (SYNC)
  * @param {*} _ usually the callback
@@ -32,31 +47,28 @@ function requireBoletoModules() {
 exports.gerar_boleto = async function (_, boletoJSON) {
 	try {
 		var { Bancos, Boletos, StreamToPromise } = requireBoletoModules();
-
 		var callback = typeof _ == 'function' ? _ : function (err) {
 			console.error({ clobJSON, err })
 			throw err
 		}
-
 		var boleto = JSON.parse(boletoJSON)
-
 		var banco = new Bancos[boleto.banco]();
-
 		boleto.boletoInfo.banco = banco
-
 		var novoBoleto = new Boletos(boleto.boletoInfo);
 		novoBoleto.gerarBoleto();
 		var filePath = boleto.pdfPath
 		var docX3 = boleto.numdud.split('/')
-
 		var { linha } = await novoBoleto.boletoInfo.getLinhaDigitavelFormatado()
 		var linhaSemFormatacao = linha.replace(/\s|\./gmi, '');
 		var fileName = `Boleto ${docX3[0]}-${docX3[1].padStart(3, '0')} ${linhaSemFormatacao}.pdf`
-
 		await novoBoleto.pdfFile(filePath, fileName);
 
-		return [filePath, fileName].join('/');
+		var result = [filePath, fileName].join('/');
+		writeLog('Boleto Gerado: '+result)
+		
+		return result
 	} catch (error) {
+		writeLog(JSON.stringify(error))
 		console.error(error)
 	}
 };
