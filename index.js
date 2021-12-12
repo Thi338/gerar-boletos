@@ -27,15 +27,22 @@ function logFileName() {
 	var month = `${date.getMonth() + 1}`;
 	var day = `${date.getDate()}`;
 	var mm = `${date.getMinutes()}`
-	var ss = date.getSeconds()
-	return `${date.getFullYear()}-${month.padStart(2, '0')}-${day.padStart(2, '0')}_${mm.padStart(2, '0')}-${ss.padStart(2, '0')}.log`
+	var ss = `${date.getSeconds()}`
+	//return `${date.getFullYear()}-${month.padStart(2, '0')}-${day.padStart(2, '0')}_${mm.padStart(2, '0')}-${ss.padStart(2, '0')}.log`
+	return 
 }
 
 function writeLog(append) {
+	var date = new Date();
+	var month = `${date.getMonth() + 1}`;
+	var day = `${date.getDate()}`;
+	var mm = `${date.getMinutes()}`
+	var ss = `${date.getSeconds()}`
+	var fileName = `${date.getFullYear()}-${month.padStart(2, '0')}-${day.padStart(2, '0')}.log`
 
 	var fs = require('fs');
-	var filePath = require("path").resolve(__dirname, logFileName())
-	fs.appendFileSync(filePath, '\n---' + append)
+	var filePath = require("path").resolve(__dirname, 'log',fileName)
+	fs.appendFileSync(filePath, `\n${date.getFullYear()}${month.padStart(2, '0')}${day.padStart(2, '0')}_${mm.padStart(2, '0')}:${ss.padStart(2, '0')}: ${append}`)
 
 }
 /**
@@ -64,8 +71,8 @@ exports.gerar_boleto = async function (_, boletoJSON) {
 		await novoBoleto.pdfFile(filePath, fileName);
 
 		var result = [filePath, fileName].join('/');
-		writeLog('Boleto Gerado: '+result)
-		
+		writeLog('Boleto Gerado: ' + result)
+
 		return result
 	} catch (error) {
 		writeLog(JSON.stringify(error))
