@@ -1,0 +1,458 @@
+#TRTYBORBOL
+INFBOX "TESTE"
+call CHAMA_ADDON()
+
+INFBOX "FIM"
+
+end
+$ACTION
+Case ACTION
+  When "EXEC"         :     Gosub EXEC
+  When Default
+  Endcase
+Return
+
+
+$EXEC
+
+#tabelas borderô
+If !clalev ([F:YBOR])   : Local File YBORDERO    [YBOR]   : Endif
+If !clalev ([F:XYBOR])  : Local File YBORDERO    [XYBOR]  : Endif
+If !clalev ([F:YBORD])  : Local File YBORDEROD   [YBORD]  : Endif
+If !clalev ([F:XYBORD]) : Local File YBORDEROD   [XYBORD] : Endif
+
+
+#tabelas layout
+If !clalev ([F:YCNABH])  : Local File YCNABH        [YCNABH]  : Endif
+If !clalev ([F:HARQ])    : Local File YCNABD        [HARQ]    : Endif
+If !clalev ([F:HLOTE])   : Local File YCNABD        [HLOTE]   : Endif
+If !clalev ([F:DET1])    : Local File YCNABD        [DET1]    : Endif
+If !clalev ([F:DET2])    : Local File YCNABD        [DET2]    : Endif
+If !clalev ([F:DET3])    : Local File YCNABD        [DET3]    : Endif
+If !clalev ([F:DET4])    : Local File YCNABD        [DET4]    : Endif
+If !clalev ([F:DET5])    : Local File YCNABD        [DET5]    : Endif
+If !clalev ([F:TLOTE])   : Local File YCNABD        [TLOTE]   : Endif
+If !clalev ([F:TARQ])    : Local File YCNABD        [TARQ]    : Endif
+
+If !clalev ([F:YCNABMO]) : Local File YCNABMOD      [YCNABMO] : Endif
+
+
+#tabela movimento
+If !clalev ([F:DUD])    : Local File GACCDUDATE  [DUD]    : Endif
+If !clalev ([F:XDUD])   : Local File GACCDUDATE  [XDUD]   : Endif
+If !clalev ([F:XPYH])   : Local File PAYMENTH    [XPYH]   : Endif
+
+
+#tabelas de cadastro
+If !clalev ([F:FCY])       : Local File FACILITY      [FCY]     : Endif
+If !clalev ([F:CPY])       : Local File COMPANY       [CPY]     : Endif
+If !clalev ([F:BAN])       : Local File BANK          [BAN]    : Endif
+If !clalev ([F:BPAFCY])    : Local File BPADDRESS     [BPAFCY] : Endif
+If !clalev ([F:BPABPR])    : Local File BPADDRESS     [BPABPR] : Endif
+If !clalev ([F:BPR])       : Local File BPARTNER      [BPR]    : Endif
+If !clalev ([F:XBPR])      : Local File BPARTNER      [XBPR]   : Endif
+If !clalev ([F:YBBPS])     : Local File YBANBPS       [YBBPS]  : Endif
+If !clalev ([F:YBAN])      : Local File YBANCO        [YBAN]   : Endif
+If !clalev ([F:GAC])       : Local File GACCOUNT      [GAC]    : Endif
+
+
+#Variaveis
+Local Char WFIL(250)  : WFIL = ''
+Local Char WFILT(250) : WFILT = ''
+Local Char WFIL_DET1(250) : WFIL_DET1 = ''
+Local Char WFIL_DET2(250) : WFIL_DET2 = ''
+Local Clbfile WTEX
+Local Clbfile WLINE
+Local Char L_NUMBOR(20)    : L_NUMBOR = [M:YBOLETO]NUMBOR
+Global Integer AUX_SEQ     : AUX_SEQ = 0       # VARIAVEL PARA CONTADOR DE LINHAS DO LOTES
+Global Integer AUX_SEL     : AUX_SEL = 0       # VARIAVEL PARA CONTADOR DE LOTE
+Global Integer AUX_SQL     : AUX_SQL = 0       # VARIAVEL PARA CONTADOR DE LOTE DENTRO DO DETALHE
+Global Integer AUX_SQT     : AUX_SQT = 0       # VARIAVEL PARA CONTADOR DE TRAILE DE LOTE
+Global Integer AUX_CONLO   : AUX_CONLO = 0     # VARIAVEL PARA CONTADOR DE LOTES DO ARQUIVO
+Global Integer AUX_CONLI   : AUX_CONLI = 2     # VARIAVEL PARA CONTADOR DE LINHAS DO ARQUIVO (CONSIDERA 1 LINHA DE HEADER ARQ + 1 TRAILER ARQ)
+Global Decimal AUX_VALLOTE : AUX_VALLOTE = 0   # VARIAVEL SOMAR O TOTAL DO LOTE
+Global Decimal AUX_VALBRT  : AUX_VALBRT = 0    # VARIAVEL SOMAR O TOTAL BRUTO DO TRIBUTO
+Global Decimal AUX_VALADC  : AUX_VALADC = 0    # VARIAVEL SOMAR O TOTAL VALOR DE MULTAS
+Global Decimal AUX_VALLIQ  : AUX_VALLIQ = 0    # VARIAVEL SOMAR O TOTAL LIQUIDO DO TRIBUTO
+
+
+Local Integer I            : I = 0             # CONTADOR DO FOR
+Local Integer BLOQUEIA     : BLOQUEIA = 0      # CONTROLE PARA BLOQUEAR REMESSA
+Local Integer LIBERA       : LIBERA = 0        # CONTROLE PARA LIBERAR REMESSA
+
+
+#Posicionar as tabelas de acordo com o lote
+Filter [F:YBOR]
+
+Read [F:YBOR]YBOR0 = L_NUMBOR
+
+Filter [F:YBORD]
+Filter [F:YBORD] Where [F:YBORD]NUMBOR = [F:YBOR]NUMBOR
+Read   [F:YBORD]
+
+
+
+#FAZER AS REGRAS DE NEGÓCIO PARA PERMITIR GERAÇÃO DE BOLETO
+
+If fstat = 0
+    Call OUVRE_TRACE("Gerar boleto") From LECFIC
+    For [F:YBORD]
+        If [F:YBORD]STA = 6
+           Call ECR_TRACE("ERRO NA LINHA " + num$(I+1), 0) From GESECRAN
+           BLOQUEIA+=1
+
+        Elsif [F:YBORD]STA = 1 | [F:YBORD]STA = 2 | [F:YBORD]STA = 3
+
+           LIBERA+=1
+
+        Endif
+      I+=1
+    Next
+    If BLOQUEIA > 0
+        Call LEC_TRACE From LECFIC
+        GERR = 2
+        GMESSAGE = "Borderô" - [M:YBOLETO]NUMBOR - "com erro, necessário corrigir linha para gerar remessa!"
+
+    Elsif LIBERA > 0
+          If [F:YBOR]STA = 1
+              Gosub GERA_CNAB
+          Else
+              Local Integer YESNO : YESNO = 2 :# Yes
+              Call OUINON("Borderô" - [M:YBOLETO]NUMBOR - "já movimentado, deseja gerar arquivo novamente? ", YESNO) From GESECRAN
+              If YESNO = 2
+                  Gosub GERA_CNAB
+              Else
+                Infbox "Geração cancelada."
+                Return
+              Endif
+          Endif
+    Else : Infbox "Geração da remessa não permitida, borderô já liquidado." : Endif
+Endif
+
+Return
+
+
+$GERA_CNAB
+#INSERIR VALIDAÇOES ANTES DE CRIAR
+
+If !clalev ([F:YCNABH]) : Local File YCNABH    [F:YCNABH] : Endif
+If !clalev ([F:YCARTE]) : Local File YCARTEIRA  [F:YCARTE] : Endif
+
+
+Filter [F:YCNABH]
+Filter [F:YCNABH] Where [F:YCNABH]NUM = [F:YBOR]LAYOUT
+Read [F:YCNABH]
+Filter [F:YCARTE]
+Filter [F:YCARTE] Where [F:YCARTE]CODCARTE = [F:YCNABH]CART
+
+Read [F:YCARTE]
+
+If [F:YCARTE]FCYEMI = 2
+  If !clalev ([F:YBORD]) : Local File YBORDEROD  [F:YBORD] : Endif
+  For [F:YBORD]
+    CALL GERABOLETO([F:YBORD]NUMDUD)
+    Gosub GERA_PAGAMENTOS
+  Next
+  
+Else
+  Infbox "Essa carteira não pode emitir boleto."
+Endif
+
+Return
+
+
+subprog GERABOLETO(NUMDUD)
+VALUE CHAR NUMDUD()
+
+    Local Char WQUERY(255)(1..)
+    Local Integer LINE
+    LINE = 0
+    LINE+=1: WQUERY(LINE) = "SELECT "
+    LINE+=1: WQUERY(LINE) = " BAN.DES_0, "
+    LINE+=1: WQUERY(LINE) = " FCY.FCY_0, "
+    LINE+=1: WQUERY(LINE) = " FCY.NAF_0, "
+    LINE+=1: WQUERY(LINE) = " BPA.XQBPACRN_0, "
+    LINE+=1: WQUERY(LINE) = " YBORD.NUMDUD_0, "
+    LINE+=1: WQUERY(LINE) = " YCNABH.CART_0 "
+    LINE+=1: WQUERY(LINE) = "FROM " + nomap + ".YBORDEROD AS YBORD "
+    LINE+=1: WQUERY(LINE) = "INNER JOIN " + nomap + ".BANK AS BAN ON YBORD.YBANCO_0 = BAN.BAN_0 "
+    LINE+=1: WQUERY(LINE) = "INNER JOIN " + nomap + ".YBORDERO AS YBOR ON YBORD.NUMBOR_0 = YBOR.NUMBOR_0 "
+    LINE+=1: WQUERY(LINE) = "INNER JOIN " + nomap + ".YCNABH AS YCNABH ON YCNABH.NUM_0 = YBOR.LAYOUT_0 "
+    LINE+=1: WQUERY(LINE) = "INNER JOIN " + nomap + ".YCARTEIRA AS YCARTE ON YCNABH.CART_0 = YCARTE.CODCARTE_0 "
+    LINE+=1: WQUERY(LINE) = "INNER JOIN " + nomap + ".FACILITY AS FCY ON YCARTE.FCY_0 = FCY.FCY_0 "
+    #LIGAR YBORD COM GACCDUDATE CAMPO VCRNUM E NUM
+    #LIGAR GACDUDAT COM BPADDRESS CAMPO BPRPAY E BPAPAY
+    LINE+=1: WQUERY(LINE) = "INNER JOIN " + nomap + ".BPADDRESS AS BPA ON FCY.BPAADD_0 = BPA.BPAADD_0 "
+    LINE+=1: WQUERY(LINE) = "AND FCY.FCY_0 = BPA.BPANUM_0 "
+    LINE+=1: WQUERY(LINE) = "WHERE YBORD.NUMDUD = '"+[L]NUMDUD+"'"
+
+
+  For (
+&     Char DES,
+&     Char FCY,
+&     Char NAF,
+&     Char CNPJ,
+&     Char NUMDUD,
+&     Char CART
+& ) From '5' Sql WQUERY As [T]
+
+      Call SETNOSSONUM([T]NUMDUD, [T]CART)#TODO: IMPLEMENTAR FUNÇÃO
+
+      Infbox "Nosso Num: " + [F:DUD]YBORNOSSONUM
+
+      Call CRIA_JSONBOLETO([T]DES, [M:YBOR0]DATA, [M:YBOR1]DUDDAT, [M:YBOR1]AMTCUR, [F:DUD]YBORNOSSONUM,
+&     [M:YBOR1]NUMBOR, [T]FCY, [T]CNPJ, [M:YBOR1]YAGENCIA, [T]NAF, [T]CART)
+
+      #CHAMA API
+
+      #PEGAR LINHA DIGITAVEL
+
+      #PEGAR PDF
+
+      #ENVIAR EMAIL
+
+  Next
+
+RETURN
+
+
+
+$GERA_PAGAMENTOS
+
+Return
+
+Subprog SETNOSSONUM(NUMDUD, CARTEIRA)
+  #BUSCAR VENCIMENTO
+	#VERIFICAR SE EXISTE NOSSO NUMERO
+	#ATRIBUIR NOSSO NUMERO SE CAMPO ESTIVER VAZIO
+
+    Value Char NUMDUD
+  	Value Char CARTEIRA
+
+    If !clalev ([F:DUD]) : Local File GACCDUDATE    [F:DUD] : Endif
+        Filter [F:DUD]
+        Filter [F:DUD] Where [F:DUD]NUMDUD = NUMDUD : #& [F:DUD]XQCARTEIRA = CARTEIRA
+        Read [F:DUD] First
+
+    If fstat = 0
+
+        If [F:DUD]YBORNOSSONUM = ''
+            Local Char CONTADOR
+            Local Integer STAT
+            Call NUMERO("YNC", "", date$, "", CONTADOR, STAT) From SUBANM
+
+            [F:DUD]YBORNOSSONUM = CONTADOR
+            Rewrite [F:DUD]
+        Endif
+
+    Endif
+End
+
+
+####### FUNÇOES DIVERSAS ############
+#-----------------------------------------------------------------------------------------------------------------------
+# Função que faz o download de um arquivo
+#------------------------------------------------------------------------------------
+Subprog DOWNLOAD(ARQUIVO, NOME)
+  Value Char ARQUIVO()
+  Value Char NOME()
+  Local Integer STAT
+  Local Char TIPO(15) : TIPO = func TIPOARQ(ARQUIVO)
+  Local Integer PONTO : PONTO = instr (0, ARQUIVO, '.')-1
+  Local Char ARQ(250)
+  ARQ = left$(ARQUIVO, PONTO)
+  If NOME=''
+    NOME=ARQ+'_'+timestamp$+'.'+TIPO
+
+  Endif
+  Call COPCLI(filpath('tmp', ARQ, TIPO), NOME, STAT) From ORDSYS
+  If STAT <> 0
+    GERR = 2
+    GMESSAGE = "Erro durante transferência do arquivo."
+  Endif
+End
+
+
+
+
+#SUBPROG PARA CRIAR O PAGAMENTO VIA IMPORTAÇÃO DE ARQUIVO.
+#------------------------------------------------------------------------------------------------------------------------------
+
+Subprog CRIA_JSONBOLETO(B_BANCO, B_DATA, B_DATA_VENC, B_VALOR, B_NOSSO_NUMERO, B_NUM_DOC, B_CEDENTE, B_CEDENTE_CNPJ, B_AGENCIA, B_CODIGO_CEDENTE, B_CARTEIRA)
+Value Char         B_BANCO
+Value Date         B_DATA
+Value Date         B_DATA_VENC
+Value Decimal      B_VALOR
+Value Char         B_NOSSO_NUMERO
+Value Char         B_NUM_DOC
+Value Char         B_CEDENTE
+Value Char         B_CEDENTE_CNPJ
+Value Char         B_AGENCIA
+Value Char         B_CODIGO_CEDENTE
+Value Char         B_CARTEIRA
+
+    Infbox "Dentro do criaJSON:"-B_NOSSO_NUMERO
+
+#CRIAR ARQUIVO PARA IMPORTAÇAO
+#--------------------------------------------------------------------------------------------------
+Local Char JSONBOLETO(250)
+JSONBOLETO = filpath('BORDERO', 'JSONBOLETO', 'json')
+Openo JSONBOLETO, 0 Using [YJSON]
+Iomode adxium 50 Using [YJSON]
+
+Local Char LINHAP(250)(0..23)
+LINHAP(0)='{'
+LINHAP(1)='"banco": '
+LINHAP(2)='"'+ B_BANCO + '",'
+LINHAP(3)='"data_emissao": '
+LINHAP(4)='"'+ num$(B_DATA) + '",'
+LINHAP(5)='"data_vencimento": '
+LINHAP(6)='"'+ num$(B_DATA_VENC) + '",'
+LINHAP(7)='"valor": '
+LINHAP(8)='"'+ num$(B_VALOR) + '",'
+LINHAP(9)='"nosso_numero": '
+LINHAP(10)='"'+ B_NOSSO_NUMERO + '",'
+LINHAP(11)='"numero_documento": '
+LINHAP(12)='"'+ B_NUM_DOC + '",'
+LINHAP(13)='"cedente": '
+LINHAP(14)='"'+ B_CEDENTE + '",'
+LINHAP(15)='"cedente_cnpj": '
+LINHAP(16)='"'+ B_CEDENTE_CNPJ + '",'
+LINHAP(17)='"agencia": '
+LINHAP(18)='"'+ B_AGENCIA + '",'
+LINHAP(19)='"codigo_cedente": '
+LINHAP(20)='"'+ B_CODIGO_CEDENTE + '",'
+LINHAP(21)='"carteira": '
+LINHAP(22)='"'+ B_CARTEIRA + '"'
+LINHAP(23)='}'
+
+Wrseq
+& LINHAP(0)
+&, LINHAP(1)
+&, LINHAP(2)
+&, LINHAP(3)
+&, LINHAP(4)
+&, LINHAP(5)
+&, LINHAP(6)
+&, LINHAP(7)
+&, LINHAP(8)
+&, LINHAP(9)
+&, LINHAP(10)
+&, LINHAP(11)
+&, LINHAP(12)
+&, LINHAP(13)
+&, LINHAP(14)
+&, LINHAP(15)
+&, LINHAP(16)
+&, LINHAP(17)
+&, LINHAP(18)
+&, LINHAP(19)
+&, LINHAP(20)
+&, LINHAP(21)
+&, LINHAP(22)
+&, LINHAP(23)
+& Using [YJSON]
+
+Openo Using [YJSON]
+Local Integer STAT
+Call COPCLI(JSONBOLETO,JSONBOLETO,STAT) From  ORDSYS
+
+#Call IMPORTSIL("YJSON", JSONBOLETO) From GIMPOBJ
+
+End
+
+subprog CHAMA_ADDON()
+Local Clbfile FILE_JSON(6)
+
+Append [L]FILE_JSON, '  {'
+Append [L]FILE_JSON, '    "pdfPath": "D:\Sage\X3V12\folders\HOM\BORDERO",'
+Append [L]FILE_JSON, '    "banco":"Bradesco",'
+Append [L]FILE_JSON, '    "numdud":"123456/1",'
+Append [L]FILE_JSON, '    "boletoInfo": {'
+Append [L]FILE_JSON, '        "pagador": {'
+Append [L]FILE_JSON, '            "nome": "José Bonifácio de Andrada",'
+Append [L]FILE_JSON, '            "RegistroNacional": "12345678",'
+Append [L]FILE_JSON, '            "endereco": {'
+Append [L]FILE_JSON, '                "logradouro": "Rua Pedro Lessa, 15",'
+Append [L]FILE_JSON, '                "bairro": "Centro",'
+Append [L]FILE_JSON, '                "cidade": "Rio de Janeiro",'
+Append [L]FILE_JSON, '                "estadoUF": "RJ",'
+Append [L]FILE_JSON, '                "cep": "20030-030"'
+Append [L]FILE_JSON, '            }'
+Append [L]FILE_JSON, '        },'
+Append [L]FILE_JSON, '        "instrucoes": ['
+Append [L]FILE_JSON, '            "Após o vencimento Mora dia R$ 1,59",'
+Append [L]FILE_JSON, '            "Após o vencimento, multa de 2%"'
+Append [L]FILE_JSON, '        ],'
+Append [L]FILE_JSON, '        "beneficiario": {'
+Append [L]FILE_JSON, '            "nome": "Empresa Fictícia LTDA",'
+Append [L]FILE_JSON, '            "cnpj": "43576788000191",'
+Append [L]FILE_JSON, '            "dadosBancarios": {'
+Append [L]FILE_JSON, '                "carteira": "09",'
+Append [L]FILE_JSON, '                "agencia": "0101",'
+Append [L]FILE_JSON, '                "agenciaDigito": "5",'
+Append [L]FILE_JSON, '                "conta": "0326446",'
+Append [L]FILE_JSON, '                "contaDigito": "0",'
+Append [L]FILE_JSON, '                "nossoNumero": "00000000061",'
+Append [L]FILE_JSON, '                "nossoNumeroDigito": "8"'
+Append [L]FILE_JSON, '            },'
+Append [L]FILE_JSON, '            "endereco": {'
+Append [L]FILE_JSON, '                "logradouro": "Rua Pedro Lessa, 15",'
+Append [L]FILE_JSON, '                "bairro": "Centro",'
+Append [L]FILE_JSON, '                "cidade": "Rio de Janeiro",'
+Append [L]FILE_JSON, '                "estadoUF": "RJ",'
+Append [L]FILE_JSON, '                "cep": "20030-030"'
+Append [L]FILE_JSON, '            }'
+Append [L]FILE_JSON, '        },'
+Append [L]FILE_JSON, '        "boleto": {'
+Append [L]FILE_JSON, '            "numeroDocumento": "1001",'
+Append [L]FILE_JSON, '            "especieDocumento": "DM",'
+Append [L]FILE_JSON, '            "valor": 110,'
+Append [L]FILE_JSON, '            "datas": {'
+Append [L]FILE_JSON, '                "vencimento": "02-04-2020",'
+Append [L]FILE_JSON, '                "processamento": "02-04-2019",'
+Append [L]FILE_JSON, '                "documentos": "02-04-2019"'
+Append [L]FILE_JSON, '            }'
+Append [L]FILE_JSON, '        }'
+Append [L]FILE_JSON, '    }'
+Append [L]FILE_JSON, '}'
+
+  Local Char MODULE(32)
+  Local Char FUNCTION(32)
+  Local Char MODE(4)
+  Local Clbfile ARGUMENTS
+  Local Char ENCODINGS(10)
+  Local Integer CALLBACKINDEX
+  Local Char RETURNS(1)
+  Local Char RETURNS_ENC(1)
+  Local Clbfile RESHEAD :#variable
+  Local Clbfile RESBODY :#variable
+
+  Local Char PATH_RESULT(255): PATH_RESULT = filpath('tmp',"-RESULT-EXAMPLE_NODE_XML", "txt")
+  Local Integer STATUSCODE
+  Local Integer  STAT,STAT2,STAT3,STAT0
+  #Call SYSTEME (adxmac(1), 'ae_rm '+PATH_RESULT,'', STAT0) From ORDSYS
+
+#FILE_JSON='<ABC version="v1"><test>ABC</test><nItem>2</nItem></ABC>'
+
+  [L]MODULE                 = 'ottech-boleto'
+  [L]FUNCTION               = 'gerar_boleto'
+  [L]MODE                   = 'wait'
+  Infbox [L]FILE_JSON  Titled  'FILE_JSON'
+  Append [L]ARGUMENTS,        '"' + escJson(FILE_JSON) + '"'
+  Infbox [L]ARGUMENTS Titled  'EXEC_HTTP'
+  [L]ENCODINGS              = ''
+  [L]CALLBACKINDEX          = 0
+  [L]RETURNS                = ''
+  [L]RETURNS_ENC            = ''
+
+
+  [L]STATUSCODE = func ASYRWEBSER.EXEC_JS([L]MODULE,[L]FUNCTION,[L]MODE,[L]ARGUMENTS,[L]ENCODINGS,[L]CALLBACKINDEX,[L]RETURNS,[L]RETURNS_ENC, [L]RESHEAD,[L]RESBODY)
+infbox 'Status ADDON',num$([L]STATUSCODE)
+
+
+END
+
+$ERROCRIAPAY
+  Infbox "Necessário verificar criação do pagamento"
+Resume

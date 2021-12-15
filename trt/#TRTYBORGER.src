@@ -1,0 +1,1052 @@
+#TRTYBORGER
+
+
+#---------------------------------------------------------------------------------------------------#
+#                                 Ottech - Serviços e Tecnologia                                    #
+#---------------------------------------------------------------------------------------------------#
+#                                                                                                   #
+#     Arquivo    :   TRTYBORGER.src                                                                 #
+#     Autor(es)  :   Marcel Cruz                                                                    #
+#     Data       :   31-10-2019                                                                     #
+#     Descrição  :   Geração Arquivo Formato CNAB                                                   #
+#     Modulo     :   Financeiro                                                                     #
+#                                                                                                   #
+#---------------------------------------------------------------------------------------------------#
+
+$ACTION
+  Case ACTION
+    When "EXEC"         :     Gosub EXEC
+    When Default
+  Endcase
+Return
+
+$EXEC
+
+#tabelas borderô
+If !clalev ([F:YBOR])   : Local File YBORDERO    [YBOR]   : Endif
+If !clalev ([F:XYBOR])  : Local File YBORDERO    [XYBOR]  : Endif
+If !clalev ([F:YBORD])  : Local File YBORDEROD   [YBORD]  : Endif
+If !clalev ([F:XYBORD]) : Local File YBORDEROD   [XYBORD] : Endif
+
+#tabelas layout
+If !clalev ([F:YCNABH])  : Local File YCNABH        [YCNABH]  : Endif
+If !clalev ([F:HARQ])    : Local File YCNABD        [HARQ]    : Endif
+If !clalev ([F:HLOTE])   : Local File YCNABD        [HLOTE]   : Endif
+If !clalev ([F:DET1])    : Local File YCNABD        [DET1]    : Endif
+If !clalev ([F:DET2])    : Local File YCNABD        [DET2]    : Endif
+If !clalev ([F:DET3])    : Local File YCNABD        [DET3]    : Endif
+If !clalev ([F:DET4])    : Local File YCNABD        [DET4]    : Endif
+If !clalev ([F:DET5])    : Local File YCNABD        [DET5]    : Endif
+If !clalev ([F:TLOTE])   : Local File YCNABD        [TLOTE]   : Endif
+If !clalev ([F:TARQ])    : Local File YCNABD        [TARQ]    : Endif
+
+If !clalev ([F:YCNABMO]) : Local File YCNABMOD      [YCNABMO] : Endif
+
+#tabela movimento
+If !clalev ([F:DUD])    : Local File GACCDUDATE  [DUD]    : Endif
+If !clalev ([F:XDUD])   : Local File GACCDUDATE  [XDUD]   : Endif
+If !clalev ([F:XPYH])   : Local File PAYMENTH    [XPYH]   : Endif
+
+
+#tabelas de cadastro
+If !clalev ([F:FCY])       : Local File FACILITY      [FCY]     : Endif
+If !clalev ([F:CPY])       : Local File COMPANY       [CPY]     : Endif
+If !clalev ([F:BAN])       : Local File BANK          [BAN]    : Endif
+If !clalev ([F:BPAFCY])    : Local File BPADDRESS     [BPAFCY] : Endif
+If !clalev ([F:BPABPR])    : Local File BPADDRESS     [BPABPR] : Endif
+If !clalev ([F:BPR])       : Local File BPARTNER      [BPR]    : Endif
+If !clalev ([F:XBPR])      : Local File BPARTNER      [XBPR]   : Endif
+If !clalev ([F:YBBPS])     : Local File YBANBPS       [YBBPS]  : Endif
+If !clalev ([F:YBAN])      : Local File YBANCO        [YBAN]   : Endif
+If !clalev ([F:GAC])      : Local File GACCOUNT      [GAC]   : Endif
+
+
+#Variaveis
+Local Char WFIL(250)  : WFIL = ''
+Local Char WFILT(250) : WFILT = ''
+Local Char WFIL_DET1(250) : WFIL_DET1 = ''
+Local Char WFIL_DET2(250) : WFIL_DET2 = ''
+Local Clbfile WTEX
+Local Clbfile WLINE
+Local Char L_NUMBOR(20)    : L_NUMBOR = [M:YBORGER]NUMBOR
+Global Integer AUX_SEQ     : AUX_SEQ = 0       # VARIAVEL PARA CONTADOR DE LINHAS DO LOTES
+Global Integer AUX_SEL     : AUX_SEL = 0       # VARIAVEL PARA CONTADOR DE LOTE
+Global Integer AUX_SQL     : AUX_SQL = 0       # VARIAVEL PARA CONTADOR DE LOTE DENTRO DO DETALHE
+Global Integer AUX_SQT     : AUX_SQT = 0       # VARIAVEL PARA CONTADOR DE TRAILE DE LOTE
+Global Integer AUX_CONLO   : AUX_CONLO = 0     # VARIAVEL PARA CONTADOR DE LOTES DO ARQUIVO
+Global Integer AUX_CONLI   : AUX_CONLI = 2     # VARIAVEL PARA CONTADOR DE LINHAS DO ARQUIVO (CONSIDERA 1 LINHA DE HEADER ARQ + 1 TRAILER ARQ)
+Global Decimal AUX_VALLOTE : AUX_VALLOTE = 0   # VARIAVEL SOMAR O TOTAL DO LOTE
+Global Decimal AUX_VALBRT  : AUX_VALBRT = 0    # VARIAVEL SOMAR O TOTAL BRUTO DO TRIBUTO
+Global Decimal AUX_VALADC  : AUX_VALADC = 0    # VARIAVEL SOMAR O TOTAL VALOR DE MULTAS
+Global Decimal AUX_VALLIQ  : AUX_VALLIQ = 0    # VARIAVEL SOMAR O TOTAL LIQUIDO DO TRIBUTO
+
+
+Local Integer I            : I = 0             # CONTADOR DO FOR
+Local Integer BLOQUEIA     : BLOQUEIA = 0      # CONTROLE PARA BLOQUEAR REMESSA
+Local Integer LIBERA       : LIBERA = 0      # CONTROLE PARA LIBERAR REMESSA
+
+#Posicionar as tabelas de acordo com o lote
+Filter [F:YBOR]
+
+Read [F:YBOR]YBOR0 = L_NUMBOR
+
+Filter [F:YBORD]
+Filter [F:YBORD] Where [F:YBORD]NUMBOR = [F:YBOR]NUMBOR
+Read   [F:YBORD]
+
+If fstat = 0
+    Call OUVRE_TRACE("Gerar remessa") From LECFIC
+    For [F:YBORD]
+        If [F:YBORD]STA = 6
+           Call ECR_TRACE("ERRO NA LINHA " + num$(I+1), 0) From GESECRAN
+           BLOQUEIA+=1
+
+        Elsif [F:YBORD]STA = 1 | [F:YBORD]STA = 2 | [F:YBORD]STA = 3
+
+           LIBERA+=1
+
+        Endif
+    I+=1
+    Next
+    If BLOQUEIA > 0
+        Call LEC_TRACE From LECFIC
+        GERR = 2
+        GMESSAGE = "Borderô" - [M:YBORGER]NUMBOR - "com erro, necessário corrigir linha para gerar remessa!"
+
+    Elsif LIBERA > 0
+          If [F:YBOR]STA = 1
+              Gosub GERA_CNAB
+          Else
+              Local Integer YESNO : YESNO = 2 :# Yes
+              Call OUINON("Borderô" - [M:YBORGER]NUMBOR - "já movimentado, deseja gerar arquivo novamente? ", YESNO) From GESECRAN
+              If YESNO = 2
+                  Gosub GERA_CNAB
+              Else
+                Infbox "Geração cancelada."
+                Return
+              Endif
+          Endif
+    Else : Infbox "Geração da remessa não permitida, borderô já liquidado." : Endif
+Endif
+
+Return
+
+$GERA_CNAB
+
+#INSERIR VALIDAÇOES ANTES DE CRIAR
+Gosub GERA_PAGAMENTOS
+
+Filter [F:BAN]
+Read [F:BAN]BAN0 = [F:YBOR]BANCO
+
+Filter [F:YCNABH]
+Read [F:YCNABH]YCNABH0 = [F:YBOR]LAYOUT
+
+Filter [F:FCY]
+Read [F:FCY]FCY0 = [F:YBOR]FCY
+
+Filter [F:CPY]
+Read [F:CPY]CPY0 = [F:FCY]LEGCPY
+
+Filter [F:BPAFCY]
+Filter [F:BPAFCY] Where [F:BPAFCY]BPANUM = [F:FCY]FCY and [F:BPAFCY]BPAADDFLG = 2
+Read [F:BPAFCY] First
+
+#Inicia montagem do arquivo
+Local Char CNABTXT(250)
+CNABTXT = filpath('tmp', 'CNABTXT', 'txt')
+Openo CNABTXT, 0 Using [YTXT]
+Iomode adxifs "" Using [YTXT]
+Iomode adxirs chr$(13)+chr$(10) Using [YTXT]
+Iomode adxium 50 Using [YTXT]
+
+#Filter [F:YCNABH]
+#Read [F:YCNABH]YCNABH0 = 'CNAB0007'
+
+#MONTAR HEADER ARQUIVO - OK
+#---------------------------------------------------------------------------------------------------------------------------
+
+#POSICIONA NA TABELA PARA GERAR OS REGISTROS - APENAS HEADER ARQUIVO
+Raz WTEX,WLINE
+Filter [F:HARQ]
+Filter [F:HARQ] Where [F:HARQ]NUM = [F:YCNABH]NUM and [F:HARQ]TIPO = 1 Order By [F:HARQ]INI Asc
+
+For [F:HARQ]
+
+   Call FORMATA(num$(evalue([F:HARQ]FORM1)),[F:HARQ]TIPODADO,[F:HARQ]TAMANHO,WTEX) #chama função para fomatar o valor encontrado
+   WLINE += format$('K:'+num$([F:HARQ]TAMANHO)+'X',WTEX) # escreve a linha de acordo com o tamanho
+
+Next
+
+If WLINE <> ''
+#Grava linha montada no arquivo
+Wrseq WLINE Using [YTXT]
+Endif
+
+#MONTAR HEADER LOTE
+#---------------------------------------------------------------------------------------------------------------------------
+#Local Integer AUX_CONT_HLOT    : AUX_CONT_HLOT = 0
+Local Char AUX_CONT_HLOT(50)    : AUX_CONT_HLOT = ''
+#Local Integer AUX_CONT_TLOT    : AUX_CONT_TLOT = 0
+Local Integer AUX_ATUAL        : AUX_ATUAL = 0
+Local Integer AUX_ANTERIOR     : AUX_ANTERIOR = 0
+
+Filter [F:YBORD]
+#Filter [F:YBORD] Where [F:YBORD]NUMBOR = [F:YBOR]NUMBOR  and find([F:YBORD]STA,1,2) Order By [F:YBORD]TPLAYOUT;[F:YBORD]LIN;[F:YBORD]CODTP;[F:YBORD]CODFP Asc
+Filter [F:YBORD] Where [F:YBORD]NUMBOR = [F:YBOR]NUMBOR  and find([F:YBORD]STA,1,2) and [F:YBORD]NUMPAY <> '' Order By [F:YBORD]TPLAYOUT;[F:YBORD]CODTP;[F:YBORD]CODFP;[F:YBORD]LIN Asc
+
+For [F:YBORD]
+
+AUX_ATUAL = [F:YBORD]TPLAYOUT
+
+  Filter [F:DUD]
+    Read [F:DUD]DUD8 = [F:YBORD]NUMDUD
+
+  Filter [F:BPR]
+    Read [F:BPR]BPR0 = [F:DUD]BPRPAY
+
+  Filter [F:BPABPR]
+  Filter [F:BPABPR] Where [F:BPABPR]BPANUM = [F:DUD]BPRPAY and [F:BPABPR]BPAADD = [F:DUD]BPAPAY
+  Read [F:BPABPR] First
+
+  Filter [F:YBAN]
+    Read [F:YBAN]YBAN0 = [F:DUD]BPR;[F:YBOR]BANCO
+
+#CONTROLE VALOR DO LOTE
+
+  AUX_VALLOTE += [F:YBORD]SALDO - [F:YBORD]DESCONTO + [F:YBORD]MULTA + [F:YBORD]JUROS
+
+  #Infbox "VL_lote:" - num$(AUX_VALLOTE) , "LIN:" - num$([F:YBORD]LIN) , "DUD:" - [F:YBORD]NUMDUD - "vl" - num$([F:YBORD]SALDO)
+
+#CONTROLE VALOR IMPOSTOS
+
+  If find ([F:YBORD]TPLAYOUT,5,6,7,8) <> 0
+    AUX_VALBRT += [F:YBORD]SALDO
+
+    AUX_VALADC += [F:YBORD]MULTA + [F:YBORD]JUROS
+
+    AUX_VALLIQ += [F:YBORD]SALDO + [F:YBORD]MULTA + [F:YBORD]JUROS
+  Endif
+
+#Controle para gerar apenas uma linha de HEADER de lote
+If AUX_CONT_HLOT <> num$([F:YBORD]TPLAYOUT)+ [F:YBORD]CODTP + [F:YBORD]CODFP
+
+
+    Raz WFIL
+    Case [F:YBORD]TPLAYOUT
+      When 1  : WFIL = 'TEDDOCTRF = 2' : Gosub ESCREVE_HLOTE :  AUX_SEQ = 0
+      When 2  : WFIL = 'BOL = 2'       : Gosub ESCREVE_HLOTE :  AUX_SEQ = 0
+      When 3  : WFIL = 'TRIBBC = 2'    : Gosub ESCREVE_HLOTE :  AUX_SEQ = 0
+      When 4  : WFIL = 'TRIBSBC = 2'   : Gosub ESCREVE_HLOTE :  AUX_SEQ = 0
+      When 5  : WFIL = 'GPS = 2'       : Gosub ESCREVE_HLOTE :  AUX_SEQ = 0
+      When 6  : WFIL = 'DARF = 2'      : Gosub ESCREVE_HLOTE :  AUX_SEQ = 0
+      When 7  : WFIL = 'DARFS = 2'     : Gosub ESCREVE_HLOTE :  AUX_SEQ = 0
+      When 8  : WFIL = 'GARESP = 2'    : Gosub ESCREVE_HLOTE :  AUX_SEQ = 0
+      When 9  : WFIL = 'LIVRE1 = 2'    : Gosub ESCREVE_HLOTE :  AUX_SEQ = 0
+      When 10 : WFIL = 'LIVRE2 = 2'    : Gosub ESCREVE_HLOTE :  AUX_SEQ = 0
+      When 11 : WFIL = 'LIVRE3 = 2'    : Gosub ESCREVE_HLOTE :  AUX_SEQ = 0
+    Endcase
+  AUX_CONT_HLOT = num$([F:YBORD]TPLAYOUT)+ [F:YBORD]CODTP + [F:YBORD]CODFP #[F:YBORD]TPLAYOUT #ANTERIOR
+Endif
+
+
+#CHAMADA PARA CRIAR AS LINHAS DE DETALHE DO LOTE
+Gosub ESCREVE_DETALHE1
+Gosub ESCREVE_DETALHE2
+Gosub ESCREVE_DETALHE3
+Gosub ESCREVE_DETALHE4
+Gosub ESCREVE_DETALHE5
+#ESCREVE O TRAILE DO LOTE (FUNÇÃO PARA VALIDAR SE O REGISTRO É O ULTIMO DO LOTE)
+If func GET_LAST([F:YBORD]NUMBOR,[F:YBORD]NUMDUD,[F:YBORD]TPLAYOUT,[F:YBORD]CODTP,[F:YBORD]CODFP) = 2
+ Gosub ESCREVE_TLOTE
+Endif
+
+
+
+#ATUALIZA STATUS DA LINHA
+[F:YBORD]STA = 2
+Rewrite [F:YBORD]
+
+Next
+
+
+#INCREMENTAR O CONTADOR PROXIMO NUMERO
+[F:BAN]YNEXTNUM += 1
+Rewrite [F:BAN]
+
+#MONTAR TRAILER ARQUIVO - OK
+#---------------------------------------------------------------------------------------------------------------------------
+
+#POSICIONA NA TABELA PARA GERAR OS REGISTROS - APENAS TAILER ARQUIVO
+Raz WTEX,WLINE
+Filter [F:HARQ]
+Filter [F:HARQ] Where [F:HARQ]NUM = [F:YCNABH]NUM and [F:HARQ]TIPO = 9 Order By [F:HARQ]INI Asc
+
+For [F:HARQ]
+
+   Call FORMATA(num$(evalue([F:HARQ]FORM1)),[F:HARQ]TIPODADO,[F:HARQ]TAMANHO,WTEX) #chama função para fomatar o valor encontrado
+   WLINE += format$('K:'+num$([F:HARQ]TAMANHO)+'X',WTEX) # escreve a linha de acordo com o tamanho
+
+Next
+
+If WLINE <> ''
+#Grava linha montada no arquivo
+Wrseq WLINE Using [YTXT]
+Endif
+
+
+#-----------------------------------------------------------------------------------------------------------------------
+# Fecha o arquivo e chama função para download
+Openo Using [YTXT]
+Call DOWNLOAD('CNABTXT.txt', '')
+
+
+#ATUALIZA STATUS BORDERO
+[F:YBOR]STA = 2
+Rewrite [F:YBOR]
+[M:YBOR0]STA = [F:YBOR]STA
+Affzo [M:YBOR0]STA
+
+
+Gosub LIENS From SUBYBOR
+
+
+Return
+
+
+#MONTAR HEADER DO LOTE
+#-----------------------------------------------------------------------------------------------------------------------
+$ESCREVE_HLOTE
+#POSICIONA NA TABELA PARA GERAR OS REGISTROS - APENAS HEADER ARQUIVO
+
+
+
+Raz WTEX,WLINE
+Filter [F:HLOTE]
+Filter [F:HLOTE] Where [F:HLOTE]NUM = [F:YCNABH]NUM and [F:HLOTE]TIPO = 2 and evalue(WFIL) Order By [F:HLOTE]INI Asc
+
+#Infbox "cont" - num$(AUX_SEL) , "wfil" - WFIL
+
+For [F:HLOTE]
+   Call FORMATA(num$(evalue([F:HLOTE]FORM1)),[F:HLOTE]TIPODADO,[F:HLOTE]TAMANHO,WTEX) #chama função para fomatar o valor encontrado
+   WLINE += format$('K:'+num$([F:HLOTE]TAMANHO)+'X',WTEX) # escreve a linha de acordo com o tamanho
+
+Next
+
+If WLINE <> ''
+#Grava linha no arquivo
+Wrseq WLINE Using [YTXT]
+Endif
+
+Return
+
+#MONTAR DETALHE 1
+#-----------------------------------------------------------------------------------------------------------------------
+$ESCREVE_DETALHE1
+
+
+
+Local Clbfile WTEX_DET1,WLINE_DET1
+Raz WTEX_DET1,WLINE_DET1
+
+
+Filter [F:DET1]
+Filter [F:DET1] Where [F:DET1]NUM = [F:YCNABH]NUM and [F:DET1]TIPO = 3 and evalue(WFIL) Order By [F:DET1]INI Asc
+For [F:DET1]
+
+#If [F:DET1]LIN = 92000 or [F:DET1]LIN = 96000
+
+ # Infbox "AMT" - num$(evalue([F:DET1]FORM1)), num$([F:DET1]LIN)
+  #Infbox "AMT" - num$(WLINE_DET1), num$([F:DET1]LIN)
+
+#Endif
+
+
+   Call FORMATA(num$(evalue([F:DET1]FORM1)),[F:DET1]TIPODADO,[F:DET1]TAMANHO,WTEX_DET1) #chama função para fomatar o valor encontrado
+   WLINE_DET1 += format$('K:'+num$([F:DET1]TAMANHO)+'X',WTEX_DET1) # escreve a linha de acordo com o tamanho
+
+
+Next
+
+If WLINE_DET1 <> ''
+#Grava linha no arquivo
+Wrseq WLINE_DET1 Using [YTXT]
+Endif
+
+Return
+
+#MONTAR DETALHE 2
+#-----------------------------------------------------------------------------------------------------------------------
+$ESCREVE_DETALHE2
+
+
+
+Local Clbfile WTEX_DET2,WLINE_DET2
+Raz WTEX_DET2,WLINE_DET2
+
+Filter [F:DET2]
+Filter [F:DET2] Where [F:DET2]NUM = [F:YCNABH]NUM and [F:DET2]TIPO = 4 and evalue(WFIL) Order By [F:DET2]INI Asc
+For [F:DET2]
+#Infbox "FSTAT" - num$(fstat)
+
+   Call FORMATA(num$(evalue([F:DET2]FORM1)),[F:DET2]TIPODADO,[F:DET2]TAMANHO,WTEX_DET2) #chama função para fomatar o valor encontrado
+   WLINE_DET2 += format$('K:'+num$([F:DET2]TAMANHO)+'X',WTEX_DET2) # escreve a linha de acordo com o tamanho
+
+Next
+
+If WLINE_DET2 <> ''
+#Grava linha no arquivo
+Wrseq WLINE_DET2 Using [YTXT]
+Endif
+
+Return
+
+#MONTAR DETALHE 3
+#-----------------------------------------------------------------------------------------------------------------------
+$ESCREVE_DETALHE3
+
+Local Clbfile WTEX_DET3,WLINE_DET3
+Raz WTEX_DET3,WLINE_DET3
+
+
+Filter [F:DET3]
+Filter [F:DET3] Where [F:DET3]NUM = [F:YCNABH]NUM and [F:DET3]TIPO = 5 and evalue(WFIL) Order By [F:DET3]INI Asc
+For [F:DET3]
+
+   Call FORMATA(num$(evalue([F:DET3]FORM1)),[F:DET3]TIPODADO,[F:DET3]TAMANHO,WTEX_DET3) #chama função para fomatar o valor encontrado
+   WLINE_DET3 += format$('K:'+num$([F:DET3]TAMANHO)+'X',WTEX_DET3) # escreve a linha de acordo com o tamanho
+
+Next
+
+If WLINE_DET3 <> ''
+#Grava linha no arquivo
+Wrseq WLINE_DET3 Using [YTXT]
+Endif
+
+Return
+
+#MONTAR DETALHE 4
+#-----------------------------------------------------------------------------------------------------------------------
+$ESCREVE_DETALHE4
+
+Local Clbfile WTEX_DET4,WLINE_DET4
+Raz WTEX_DET4,WLINE_DET4
+
+
+Filter [F:DET4]
+Filter [F:DET4] Where [F:DET4]NUM = [F:YCNABH]NUM and [F:DET4]TIPO = 6 and evalue(WFIL) Order By [F:DET4]INI Asc
+For [F:DET4]
+
+   Call FORMATA(num$(evalue([F:DET4]FORM1)),[F:DET4]TIPODADO,[F:DET4]TAMANHO,WTEX_DET4) #chama função para fomatar o valor encontrado
+   WLINE_DET4 += format$('K:'+num$([F:DET4]TAMANHO)+'X',WTEX_DET4) # escreve a linha de acordo com o tamanho
+
+Next
+
+If WLINE_DET4 <> ''
+#Grava linha no arquivo
+Wrseq WLINE_DET4 Using [YTXT]
+Endif
+
+Return
+
+#MONTAR DETALHE 5
+#-----------------------------------------------------------------------------------------------------------------------
+$ESCREVE_DETALHE5
+
+Local Clbfile WTEX_DET5,WLINE_DET5
+Raz WTEX_DET5,WLINE_DET5
+
+
+Filter [F:DET5]
+Filter [F:DET5] Where [F:DET5]NUM = [F:YCNABH]NUM and [F:DET5]TIPO = 7 and evalue(WFIL) Order By [F:DET5]INI Asc
+For [F:DET5]
+
+   Call FORMATA(num$(evalue([F:DET5]FORM1)),[F:DET5]TIPODADO,[F:DET5]TAMANHO,WTEX_DET5) #chama função para fomatar o valor encontrado
+   WLINE_DET5 += format$('K:'+num$([F:DET5]TAMANHO)+'X',WTEX_DET5) # escreve a linha de acordo com o tamanho
+
+Next
+
+If WLINE_DET5 <> ''
+#Grava linha no arquivo
+Wrseq WLINE_DET5 Using [YTXT]
+Endif
+
+Return
+
+#MONTAR TRAILER DO LOTE
+#-----------------------------------------------------------------------------------------------------------------------
+$ESCREVE_TLOTE
+#POSICIONA NA TABELA PARA GERAR OS REGISTROS - APENAS HEADER ARQUIVO
+#If AUX_ANTERIOR <> AUX_ATUAL
+
+  Local Clbfile WTEX_TLOTE,WLINE_TLOTE
+  Raz WTEX_TLOTE,WLINE_TLOTE
+
+  Filter [F:TLOTE]
+  Filter [F:TLOTE] Where [F:TLOTE]NUM = [F:YCNABH]NUM and [F:TLOTE]TIPO = 8 and evalue(WFIL) Order By [F:TLOTE]INI Asc
+  For [F:TLOTE]
+
+     Call FORMATA(num$(evalue([F:TLOTE]FORM1)),[F:TLOTE]TIPODADO,[F:TLOTE]TAMANHO,WTEX_TLOTE) #chama função para fomatar o valor encontrado
+     WLINE_TLOTE += format$('K:'+num$([F:TLOTE]TAMANHO)+'X',WTEX_TLOTE) # escreve a linha de acordo com o tamanho
+
+  Next
+
+  If WLINE_TLOTE <> ''
+  #Grava linha no arquivo
+  Wrseq WLINE_TLOTE Using [YTXT]
+  Endif
+#Endif
+
+Return
+
+
+
+$GERA_PAGAMENTOS
+
+Local Char SPAY(30)
+Local Integer SRET
+Local Char AUX_DESC(250) : AUX_DESC = 'PAGAMENTO CNAB'
+
+Filter [F:XYBOR]
+Read [F:XYBOR]YBOR0 = L_NUMBOR
+
+Filter [F:XYBORD]
+Filter [F:XYBORD] Where [F:XYBORD]NUMBOR = L_NUMBOR and [F:XYBORD]STA = 1 #and [F:XYBORD]NUMPAY = ''
+
+
+For [F:XYBORD]
+
+
+  Filter [F:XDUD]
+    Read [F:XDUD]DUD8 = [F:XYBORD]NUMDUD
+  Filter [F:XBPR]
+    Read [F:XBPR]BPR0 = [F:XDUD]BPR
+
+
+
+
+
+If [F:XYBORD]NUMPAY = ''
+
+     Local Decimal AUX_SALDO : AUX_SALDO = (([F:XDUD]AMTCUR)-[F:XDUD]PAYCUR-[F:XDUD]TMPCUR)
+
+     #BUSCA COLETIVO DO VENCIMENTO
+     Local Char AUX_SAC(5) : AUX_SAC = ''
+     If [F:XDUD]SAC <> ''
+      AUX_SAC = [F:XDUD]SAC
+     Endif
+
+
+
+#Call CRIA_PAY("","PGTO",[F:XDUD]BPR,[F:XDUD]FCY,[F:XYBOR]BANCO,[F:XDUD]CUR,num$(AUX_SALDO),ctrans(num$([F:XDUD]DUDDAT),'/',''),"",[F:XDUD]BPR,[F:XDUD]TYP,[F:XDUD]NUM,num$(AUX_SALDO),"","",
+
+#& "","","","","BORDERÔ:" - [F:XYBORD]NUMBOR,AUX_SAC,SRET)
+
+#Call CRIA_PAY("","PGTO",[F:XDUD]BPR,[F:XDUD]FCY,[F:XYBOR]BANCO,[F:XDUD]CUR,num$(AUX_SALDO),ctrans(num$([F:XYBORD]DATPAG),'/',''),"",[F:XDUD]BPR,[F:XDUD]TYP,[F:XDUD]NUM,num$(AUX_SALDO),"","","","","",
+
+#& "",num$([F:XDUD]DUDLIG),num$([F:XDUD]ACCNUM),"BORDERÔ:" - [F:XYBORD]NUMBOR,AUX_SAC,SRET)
+If GUSER = 'OTT06' : Infbox "GERA_PAGAMENTOS: " + num$([F:XYBORD]NUMDUD)+" NUMPAY:" + [F:XYBORD]NUMPAY Endif
+
+
+Call CRIA_PAY("","PGTO",[F:XDUD]BPR,[F:XDUD]FCY,[F:XYBOR]BANCO,[F:XDUD]CUR,num$(AUX_SALDO),ctrans(num$([F:XYBORD]DATPAG),'/',''),"",[F:XDUD]BPR,[F:XDUD]TYP,[F:XDUD]NUM,[F:XDUD]ACCNUM,[F:XDUD]DUDLIG,
+& num$(AUX_SALDO),[F:XYBORD]JUROS,"",[F:XYBORD]MULTA,"",[F:XYBORD]DESCONTO,
+& "",num$(year([F:XDUD]DUDDAT))+format$("N0:2",month([F:XDUD]DUDDAT))+format$("N0:2",day([F:XDUD]DUDDAT)),"BORDERÔ:" - [F:XYBORD]NUMBOR,AUX_SAC,SPAY,SRET)
+
+      [F:XYBORD]NUMPAY = SPAY
+      [F:XYBORD]STA = SRET
+      Rewrite [F:XYBORD]
+
+Endif
+
+Next
+
+Return
+
+####### FUNÇOES DIVERSAS ############
+#-----------------------------------------------------------------------------------------------------------------------
+# Função que faz o download de um arquivo
+#------------------------------------------------------------------------------------
+Subprog DOWNLOAD(ARQUIVO, NOME)
+  Value Char ARQUIVO()
+  Value Char NOME()
+  Local Integer STAT
+  Local Char TIPO(15) : TIPO = func TIPOARQ(ARQUIVO)
+  Local Integer PONTO : PONTO = instr (0, ARQUIVO, '.')-1
+  Local Char ARQ(250)
+  ARQ = left$(ARQUIVO, PONTO)
+  If NOME=''
+    NOME=ARQ+'_'+timestamp$+'.'+TIPO
+
+  Endif
+  Call COPCLI(filpath('tmp', ARQ, TIPO), NOME, STAT) From ORDSYS
+  If STAT <> 0
+    GERR = 2
+    GMESSAGE = "Erro durante transferência do arquivo."
+  Endif
+End
+
+# Função que retorna a extensão do arquivo
+#------------------------------------------------------------------------------------
+Funprog TIPOARQ(ARQUIVO)
+  Value Char ARQUIVO()
+  Local Char EXTENSAO(10)
+  Local Integer I
+  I = len(ARQUIVO)
+  While I > 0
+    Break(xgetchar(ARQUIVO, I)='.')
+    EXTENSAO += xgetchar(ARQUIVO, I)
+    I-=1
+  Wend
+  EXTENSAO = func REVERSE(EXTENSAO)
+  If EXTENSAO<>''
+    End EXTENSAO
+  Endif
+End ''
+
+# Função que retorna a string reversa
+# -----------------------------------
+Funprog REVERSE(STRING)
+  Value Char STRING()
+  Local Integer COMP
+  COMP = len(STRING)
+  Local Char REVERSE(COMP)
+  For I=0 To COMP
+    REVERSE += xgetchar(STRING, COMP)
+    COMP-=1
+  Next I
+End REVERSE
+
+Subprog FORMATA(YTEXT,YTIPO,YTAM,YRET)
+Value Clbfile YTEXT
+Value Integer YTIPO,YTAM
+Variable Clbfile YRET
+
+  If YTIPO=2 # DATA
+    YRET = ctrans(YTEXT,"/","")
+
+  Elsif find(YTIPO,3,4) #Numero e moeda
+    YRET = ctrans(YTEXT,".","")
+    YRET = ctrans(YTEXT,",","")
+
+    YRET = format$("N0:"+num$(YTAM),YRET)
+
+
+  Elsif YTEXT = '#SEQ'  # TRATA A SEQUENCIA DENTRO DO LOTE
+    AUX_SEQ += 1
+    YRET = format$("N0:"+num$(YTAM),num$(AUX_SEQ))
+
+  Elsif YTEXT = '#SEL' # TRATA A SEQUENCIA DO LOTE
+    AUX_SEL += 1
+    AUX_SQT = 1
+    AUX_CONLO +=1
+
+    YRET = format$("N0:"+num$(YTAM),num$(AUX_SEL))
+
+  Elsif YTEXT = '#SQL' # REPETE A SEQUENCIA DO LOTE NO DETALHE
+    AUX_SQL = AUX_SEL
+    AUX_SQT +=1
+    AUX_CONLI +=1
+
+    YRET = format$("N0:"+num$(YTAM),num$(AUX_SQL))
+
+  Elsif YTEXT = '#SQT' # TOTALIZADO DE LINHAS NO TRAILER
+    YRET = format$("N0:"+num$(YTAM),num$(AUX_SQT))
+
+  Elsif YTEXT = '#CONLO' # TOTAL DE LOTES NO ARQUIVO
+    YRET = format$("N0:"+num$(YTAM),num$(AUX_CONLO))
+
+  Elsif YTEXT = '#CONLI' # TOTAL DE LINHAS NO ARQUIVO
+   AUX_CONLI += AUX_CONLO
+    YRET = format$("N0:"+num$(YTAM),num$(AUX_CONLI))
+
+  Elsif YTEXT = '#VALLOTE' # TOTAL DO LOTE
+    YRET = ctrans(ctrans(num$(format$("N9.2",AUX_VALLOTE)),".","")," ","")
+    YRET = ctrans(num$(YRET),",","")
+    YRET = ctrans(num$(YRET),".","")
+    YRET = format$("N0:"+num$(YTAM),YRET)
+    AUX_VALLOTE = 0
+
+    Elsif YTEXT = '#VALBRT' # TOTAL BRUTO
+    YRET = ctrans(ctrans(num$(format$("N9.2",AUX_VALBRT)),".","")," ","")
+    YRET = ctrans(num$(YRET),",","")
+    YRET = ctrans(num$(YRET),".","")
+    YRET = format$("N0:"+num$(YTAM),YRET)
+    AUX_VALBRT = 0
+
+    Elsif YTEXT = '#VALADC' # TOTAL ADICOES
+    YRET = ctrans(ctrans(num$(format$("N9.2",AUX_VALADC)),".","")," ","")
+    YRET = ctrans(num$(YRET),",","")
+    YRET = ctrans(num$(YRET),".","")
+    YRET = format$("N0:"+num$(YTAM),YRET)
+    AUX_VALADC = 0
+
+  Elsif YTEXT = '#VALLIQ' # TOTAL LIQUIDO
+    YRET = ctrans(ctrans(num$(format$("N9.2",AUX_VALLIQ)),".","")," ","")
+    YRET = ctrans(num$(YRET),",","")
+    YRET = ctrans(num$(YRET),".","")
+    YRET = format$("N0:"+num$(YTAM),YRET)
+    AUX_VALLIQ = 0
+
+  Else
+
+    #YRET = YTEXT
+
+    YRET = func TRT_TEXT(YTEXT)
+
+  Endif
+
+End
+
+
+#função para buscar ultimo registro do lote
+
+Funprog GET_LAST(YNUMBOR,YNUMDUD,YLAYOUT,YCODTP,YCODFP)
+Value Char YNUMBOR,YNUMDUD,YCODTP,YCODFP
+Value Integer YLAYOUT
+
+If !clalev ([F:XYBORD])  : Local File YBORDEROD   [XYBORD]  : Endif
+
+Filter [F:XYBORD]
+#Filter [F:XYBORD] Where [F:XYBORD]NUMBOR = YNUMBOR and [F:XYBORD]TPLAYOUT = YLAYOUT and [F:XYBORD]CODTP = YCODTP and [F:XYBORD]CODFP = YCODFP Order By [F:XYBORD]TPLAYOUT;[F:XYBORD]LIN Asc
+
+Filter [F:XYBORD] Where [F:XYBORD]NUMBOR = YNUMBOR and [F:XYBORD]TPLAYOUT = YLAYOUT and [F:XYBORD]CODTP = YCODTP and [F:XYBORD]CODFP = YCODFP  and find([F:XYBORD]STA,1,2) Order By [F:XYBORD]TPLAYOUT;[
+& F:XYBORD]LIN Asc
+Read [F:XYBORD] Last
+
+  If [F:XYBORD]NUMDUD = YNUMDUD
+    End 2
+  Endif
+
+End 1
+
+#Função para retirar caracteres especiais do texto
+
+Funprog TRT_TEXT(F_TEXT)
+Value Clbfile F_TEXT
+Local Clbfile RET_TEXT
+
+  RET_TEXT = F_TEXT
+
+  RET_TEXT = ctrans(toupper(RET_TEXT),"Ã","A")
+  RET_TEXT = ctrans(toupper(RET_TEXT),"Á","A")
+  RET_TEXT = ctrans(toupper(RET_TEXT),"À","A")
+  RET_TEXT = ctrans(toupper(RET_TEXT),"Â","A")
+  RET_TEXT = ctrans(toupper(RET_TEXT),"É","E")
+  RET_TEXT = ctrans(toupper(RET_TEXT),"Ê","E")
+  RET_TEXT = ctrans(toupper(RET_TEXT),"Í","I")
+  RET_TEXT = ctrans(toupper(RET_TEXT),"Ó","O")
+  RET_TEXT = ctrans(toupper(RET_TEXT),"Õ","O")
+  RET_TEXT = ctrans(toupper(RET_TEXT),"Ô","O")
+  RET_TEXT = ctrans(toupper(RET_TEXT),"Ú","U")
+  RET_TEXT = ctrans(toupper(RET_TEXT),"Ç","C")
+
+  RET_TEXT = ctrans(toupper(RET_TEXT),"°","")
+
+
+End RET_TEXT
+
+#SUBPROG PARA CRIAR O PAGAMENTO VIA IMPORTAÇÃO DE ARQUIVO.
+#------------------------------------------------------------------------------------------------------------------------------
+Subprog CRIA_PAY(P_NUM,P_PAYTYP,P_BPR,P_FCY,P_BAN,P_CUR,P_AMTCUR,P_ACCDAT,D_DENCOD,D_BPRLIN,D_VCRTYP,D_VCRNUM,D_ACCNUM,D_DUDLIG,D_AMTLIN,D_JUROS,D_DENCODJ,D_DESP,D_DENCODDP,D_DESC,D_DENCODDC,D_DUDDAT,
+& P_DESC,
+& P_BPRSAC,SPAY,SRET)
+
+Value Char    P_NUM
+Value Char    P_PAYTYP
+Value Char    P_BPR
+Value Char    P_FCY
+Value Char    P_BAN
+Value Char    P_CUR
+Value Char    P_AMTCUR
+Value Char    P_ACCDAT
+Value Char    P_DESC
+Value Char    P_BPRSAC
+
+
+Value Char    D_DENCOD
+Value Char    D_BPRLIN
+Value Char    D_VCRTYP
+Value Char    D_VCRNUM
+Value Integer D_ACCNUM
+Value Integer D_DUDLIG
+Value Char    D_AMTLIN
+
+Value Decimal    D_JUROS
+Value Char    D_DENCODJ
+
+Value Decimal    D_DESP
+Value Char    D_DENCODDP
+
+Value Decimal    D_DESC
+Value Char    D_DENCODDC
+
+Value Char D_DUDDAT
+
+Variable Char SPAY
+Variable Integer SRET #Retorna o Status do Pagamento
+
+Filter [F:GAC]
+Read   [F:GAC]GAC1 = "BRL";[F:DUD]SAC
+
+Local Char    P_COA(5)    : P_COA    = ""
+Local Char    P_ACC(12)   : P_ACC    = ""
+Local Char    P_SNS(1)    : P_SNS    = "1"
+Local Char    YP_BPRSAC   : YP_BPRSAC = P_BPRSAC
+
+#CRIAR ARQUIVO PARA IMPORTAÇAO
+#--------------------------------------------------------------------------------------------------
+Local Char YPAYTXT(250)
+YPAYTXT = filpath('tmp', 'YPAYTXT', 'txt')
+
+Openo YPAYTXT, 0 Using [YPAY]
+Iomode adxifs ';' Using [YPAY]
+Iomode adxirs chr$(13)+chr$(10) Using [YPAY]
+Iomode adxium 50 Using [YPAY]
+
+#Wrseq "P"+';'+P_NUM+';'+P_PAYTYP+';'+""+';'+P_BPR+';'+P_COA+';'+P_ACC+';'+P_BPRSAC+';'+""+';'+""+';'+P_FCY+';'+P_BAN+';'+P_SNS+';'+P_CUR+';'+P_AMTCUR+';'+P_ACCDAT+';'+P_DESC Using [YPAY& ]
+
+Local Char LINHAP(250)(0..16)
+LINHAP(0)='"P"'
+LINHAP(1)='"'+P_NUM+'"'
+LINHAP(2)='"'+P_PAYTYP+'"'
+LINHAP(3)='""'
+LINHAP(4)='"'+P_BPR+'"'
+LINHAP(5)='"'+P_COA+'"'
+LINHAP(6)='"'+P_ACC+'"'
+LINHAP(7)='"'+YP_BPRSAC+'"'
+LINHAP(8)='""'
+LINHAP(9)='""'
+LINHAP(10)='"'+P_FCY+'"'
+LINHAP(11)='"'+P_BAN+'"'
+LINHAP(12)='"'+P_SNS+'"'
+LINHAP(13)='"'+P_CUR+'"'
+LINHAP(14)='"'+P_AMTCUR+'"'
+LINHAP(15)='"'+P_ACCDAT+'"'
+LINHAP(16)='"'+P_DESC+'"'
+Wrseq
+&   LINHAP(0)
+& , LINHAP(1)
+& , LINHAP(2)
+& , LINHAP(3)
+& , LINHAP(4)
+& , LINHAP(5)
+& , LINHAP(6)
+& , LINHAP(7)
+& , LINHAP(8)
+& , LINHAP(9)
+& , LINHAP(10)
+& , LINHAP(11)
+& , LINHAP(12)
+& , LINHAP(13)
+& , LINHAP(14)
+& , LINHAP(15)
+& , LINHAP(16)
+& Using [YPAY]
+
+#Wrseq "D"+';'+D_DENCOD+';"";"";'+D_BPRLIN+';'+D_VCRTYP+';'+D_VCRNUM+';"";"";"";"";"";'+D_AMTLIN+';"";0' Using [YPAY]
+#Wrseq "D"+';'+D_DENCOD+';"";"";'+D_BPRLIN+';'+D_VCRTYP+';'+D_VCRNUM+';'+Num$(D_ACCNUM)+';'+Num$(D_DUDLIG)+';"";'+D_BPRLIN+';'+D_DUDDAT+';'+P_FCY+';"";'+D_AMTLIN+';'+P_BPR+';'+P_BPRSAC+';"";0;"";'
+# Using [YPAY]
+
+#Wrseq 
+# "D"+';'+"PAGAM"+';'+"ETY"+';'+"210202001"+';'+D_BPRLIN+';'+D_VCRTYP+';'+D_VCRNUM+';'+Num$(D_ACCNUM)+';'+Num$(D_DUDLIG)+';"";'+D_BPRLIN+';'+D_DUDDAT+';'+P_FCY+';'+P_CUR+';'+D_AMTLIN+';'+P_BPR+';"'+YP
+#_BPRSAC+'";"";0;"";' Using [YPAY]
+
+Local Char LINHAD(250)(0..16)
+LINHAD(0) ='"D"'
+LINHAD(1) ='"PAGAM"'
+LINHAD(2) ='"'+P_COA+'"'
+LINHAD(3) ='"'+P_ACC+'"'
+LINHAD(4) ='"'+D_BPRLIN+'"'
+LINHAD(5) ='"'+D_VCRTYP+'"'
+LINHAD(6) ='"'+D_VCRNUM+'"'
+LINHAD(7) ='"'+num$(D_ACCNUM)+'"'
+LINHAD(8) ='"'+num$(D_DUDLIG)+'"'
+LINHAD(9) ='""'
+LINHAD(10)  ='"'+D_BPRLIN+'"'
+LINHAD(11)  ='"'+D_DUDDAT+'"'
+LINHAD(12)  ='"'+P_FCY+'"'
+LINHAD(13)  ='"'+P_CUR+'"'
+LINHAD(14)  ='"'+D_AMTLIN+'"'
+LINHAD(15)  ='"'+P_BPR+'"'
+LINHAD(16)  ='"'+YP_BPRSAC+'"'
+Wrseq
+&   LINHAD(0)
+& , LINHAD(1)
+& , LINHAD(2)
+& , LINHAD(3)
+& , LINHAD(4)
+& , LINHAD(5)
+& , LINHAD(6)
+& , LINHAD(7)
+& , LINHAD(8)
+& , LINHAD(9)
+& , LINHAD(10)
+& , LINHAD(11)
+& , LINHAD(12)
+& , LINHAD(13)
+& , LINHAD(14)
+& , LINHAD(15)
+& , LINHAD(16)
+& Using [YPAY]
+
+If D_JUROS <> 0
+  #Wrseq "D"+';'+"JUROS"+';"";"";"";"";"";"";"";"";"";"";"";"";'+""+Num$(D_JUROS)+';"";0' Using [YPAY]
+  #"D";"JURO";"JDA";"33401002";"";"";"";"";"";"";"";"BRL";10;"";0;""
+  Raz LINHAD
+  LINHAD(0) ='"D"'
+  LINHAD(1) ='"JUROS"'
+  LINHAD(2) ='""'
+  LINHAD(3) ='""'
+  LINHAD(4) ='""'
+  LINHAD(5) ='""'
+  LINHAD(6) ='""'
+  LINHAD(7) ='""'
+  LINHAD(8) ='""'
+  LINHAD(9) ='""'
+  LINHAD(10)  ='""'
+  LINHAD(11)  ='""'
+  LINHAD(12)  ='""'
+  LINHAD(13)  ='""'
+  LINHAD(14)  ='"'+num$(D_JUROS)+'"'
+  LINHAD(15)  ='""'
+  LINHAD(16)  ='""'
+
+  Wrseq
+&   LINHAD(0)
+& , LINHAD(1)
+& , LINHAD(2)
+& , LINHAD(3)
+& , LINHAD(4)
+& , LINHAD(5)
+& , LINHAD(6)
+& , LINHAD(7)
+& , LINHAD(8)
+& , LINHAD(9)
+& , LINHAD(10)
+& , LINHAD(11)
+& , LINHAD(12)
+& , LINHAD(13)
+& , LINHAD(14)
+& , LINHAD(15)
+& , LINHAD(16)
+& Using [YPAY]
+
+Endif
+
+If D_DESP <> 0
+  #Wrseq "D"+';'+"DESP"+';"";"";"";"";"";"";"";"";"";"";"";"";'+Num$(D_DESP)+';"";0' Using [YPAY]
+  #"D";"DESC";"JDA";"33402003";"";"";"";"";"";"";"";"BRL";5;"";0;""
+
+  Raz LINHAD
+  LINHAD(0) ='"D"'
+  LINHAD(1) ='"DESP"'
+  LINHAD(2) ='""'
+  LINHAD(3) ='""'
+  LINHAD(4) ='""'
+  LINHAD(5) ='""'
+  LINHAD(6) ='""'
+  LINHAD(7) ='""'
+  LINHAD(8) ='""'
+  LINHAD(9) ='""'
+  LINHAD(10)  ='""'
+  LINHAD(11)  ='""'
+  LINHAD(12)  ='""'
+  LINHAD(13)  ='""'
+  LINHAD(14)  ='"'+num$(D_DESP)+'"'
+  LINHAD(15)  ='""'
+  LINHAD(16)  ='""'
+
+  Wrseq
+&   LINHAD(0)
+& , LINHAD(1)
+& , LINHAD(2)
+& , LINHAD(3)
+& , LINHAD(4)
+& , LINHAD(5)
+& , LINHAD(6)
+& , LINHAD(7)
+& , LINHAD(8)
+& , LINHAD(9)
+& , LINHAD(10)
+& , LINHAD(11)
+& , LINHAD(12)
+& , LINHAD(13)
+& , LINHAD(14)
+& , LINHAD(15)
+& , LINHAD(16)
+& Using [YPAY]
+
+Endif
+
+If D_DESC <> 0
+  #Wrseq "D"+';'+"DFINA"+';"";"";"";"";"";"";"";"";"";"";"";"";'+Num$(D_DESC)+';"";0' Using [YPAY]
+  #"D";"DESP";"JDA";"";"";"";"";"";"";"";"";"BRL";6;"";0;""
+
+  Raz LINHAD
+  LINHAD(0) ='"D"'
+  LINHAD(1) ='"DFINA"'
+  LINHAD(2) ='""'
+  LINHAD(3) ='""'
+  LINHAD(4) ='""'
+  LINHAD(5) ='""'
+  LINHAD(6) ='""'
+  LINHAD(7) ='""'
+  LINHAD(8) ='""'
+  LINHAD(9) ='""'
+  LINHAD(10)  ='""'
+  LINHAD(11)  ='""'
+  LINHAD(12)  ='""'
+  LINHAD(13)  ='""'
+  LINHAD(14)  ='"'+num$(D_DESC)+'"'
+  LINHAD(15)  ='""'
+  LINHAD(16)  ='""'
+
+  Wrseq
+&   LINHAD(0)
+& , LINHAD(1)
+& , LINHAD(2)
+& , LINHAD(3)
+& , LINHAD(4)
+& , LINHAD(5)
+& , LINHAD(6)
+& , LINHAD(7)
+& , LINHAD(8)
+& , LINHAD(9)
+& , LINHAD(10)
+& , LINHAD(11)
+& , LINHAD(12)
+& , LINHAD(13)
+& , LINHAD(14)
+& , LINHAD(15)
+& , LINHAD(16)
+& Using [YPAY]
+
+
+Endif
+
+Openo Using [YPAY]
+#Call IMPORTSIL("YPAY", YPAYTXT) From GIMPOBJ
+Onerrgo ERROCRIAPAY
+  Call IMPORTSIL("YPAY", YPAYTXT) From GIMPOBJ
+Onerrgo
+
+#BUSCA NUMERO DO PAGAMENTO
+If !clalev ([F:PYD])  : Local File PAYMENTD   [PYD] : Endif
+Filter [F:PYD]
+Filter [F:PYD] Where [F:PYD]VCRNUM = D_VCRNUM & [F:PYD]DUDLIG = D_DUDLIG
+
+#infbox "Linhas: "+num$(rowcount([F:PYD]))+", VCRNUM: "+D_VCRNUM+", DUDLIG: "+num$(D_DUDLIG)
+Read [F:PYD] First
+SPAY = ''
+SRET = 6
+
+If fstat=0
+  SPAY = [F:PYD]NUM
+  SRET = 1
+Endif
+
+End
+
+$ERROCRIAPAY
+  Infbox "Necessário verificar criação do pagamento"
+Resume

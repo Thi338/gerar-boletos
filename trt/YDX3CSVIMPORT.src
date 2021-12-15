@@ -1,0 +1,1672 @@
+#**
+#*------------------------------------------------------------------------------------------- <br>
+#*                                 Ottech - Serviços e Tecnologia                             <br>
+#*------------------------------------------------------------------------------------------- <br>
+#*                                                                                            <br>
+#*     Arquivo    :   YDX3CSVIMPORT.src                                                       <br>
+#*     Autor(es)  :   Lucas Zingaro                                                           <br>
+#*     Data       :   2021-09-16                                                              <br>
+#*     Descrição  :   Y Desenv Custom X3 CSV - Import                                         <br>
+#*     Atualizado :   2021-10-01                                                              <br>
+#*                                                                                            <br>
+#*------------------------------------------------------------------------------------------- <br>
+#*!
+  Gosub EXAMPLE_NODE_XML
+
+#  Global Integer Y_SHOW_INF_BOXES : [V]Y_SHOW_INF_BOXES = 0 : # (0) false and (1+) true
+#  Global Integer Y_SHOW_DEBUG : [V]Y_SHOW_DEBUG = 0 : # (0) false and (1+) true
+#  Local Integer ASSERTS_ENABLE : ASSERTS_ENABLE = 1 : # (0) false and (1+) true
+
+#  Gosub ASSERT_TESTS
+#  Gosub RUNNER
+#  Gosub EXAMPLE_YACLASSE
+#   Infbox func YDATEUTILS.GET_DATE_TIME_FORMAT(num$(date$))
+End
+
+#**
+#* Realiza testes
+#*!
+$ASSERT_TESTS
+  If(ASSERTS_ENABLE > 0)
+     Local Integer AUX_DEBUG : [L]AUX_DEBUG = val(num$([V]Y_SHOW_DEBUG))
+     [V]Y_SHOW_DEBUG = 0
+     Call TEST_GET_CHAR_ARRAY_LENGTH()
+     Call TEST_RESOLVE_PARENT_PATH()
+     [V]Y_SHOW_DEBUG = AUX_DEBUG
+  Endif
+Return
+
+#**
+#* Real rotina de execution
+#*!
+$RUNNER : Infbox "Run run"
+  # Get file path on server in tmp application directory for curent application
+  Local Char MY_FILE_PATH(255)
+  :       [L]MY_FILE_PATH = filpath("tmp", "NOTA_COMPLEXA_xml", "txt") : # Searching for myfile.txt in tmp directory
+#  :       [L]MY_FILE_PATH = filpath("tmp", "NOTA_RESUMIDA_xml", "txt") : # Searching for myfile.txt in tmp directory
+
+  #Infbox [L]MY_FILE_PATH
+
+  Local Instance  Y_OBJ_NFE_PROC Using C_YNFEPROC
+  :               Y_OBJ_NFE_PROC = NewInstance  C_YNFEPROC AllocGroup null
+  Local Char OBJ_CLASS_NAME(32)
+  :          OBJ_CLASS_NAME = 'C_YNFEPROC'
+
+  #Infbox Y_OBJ_NFE_PROC.ObjectType Titled "1Objecttype"
+  Call CONSUME_FILE_AND_POPULATE_CLASS([L]MY_FILE_PATH, [L]Y_OBJ_NFE_PROC, [L]OBJ_CLASS_NAME)
+  Infbox "END END"
+Return
+
+#**
+#* Comsome um arquivo CSV custom X3 e converte para a classe desejada
+#* @param CSV_FILE_PATH {Char}
+#*!
+Subprog CONSUME_FILE_AND_POPULATE_CLASS(CSV_FILE_PATH, CLASS_INSTANCE, CLASS_NAME)
+  #STEP INIT CONSUME_FILE_AND_POPULATE_CLASS
+  Value Char CSV_FILE_PATH
+  Value Char CLASS_NAME
+  Variable Instance CLASS_INSTANCE Using OBJECT
+
+  Gosub INITIAL_VALIDATION_FOR_CLASS_INSTANCE
+
+  Local Char WORDS_SECTION(255)(0..)
+  Local Char PARENT_SECTION(255)(0..)
+  Local Integer SECTION_LENGTH
+  Local Integer PARENT_SECTION_LENGTH
+  Local Integer LINE_NUM :# LINE_NUM = 0
+  Local Integer FSTATUS_MAIN
+
+  # abrindo arquivo
+  Openi CSV_FILE_PATH, 0 Using [YFL]
+    Iomode adxium 0 Using [YFL] :# UTF8
+    Iomode adxifs ';' Using [YFL] :# separador de palavras da linha
+
+    Infbox "Open file:" + CSV_FILE_PATH
+#    Local Char A(255)(0..),B(255)(0..)
+
+    #STEP line by line until the end
+    Repeat
+      Gosub READ_CSV_LINE :# WORDS_SECTION
+      #FIXME remove it
+#      Call COPY_CHAR_ARRAY(WORDS_SECTION, A, 0, func GET_CHAR_ARRAY_LENGTH(WORDS_SECTION))
+
+
+      If(dim(WORDS_SECTION) < 1) :
+        Infbox "FINAL dim([L]WORDS_SECTION) < 1"
+        Break
+      Endif
+      If(len(WORDS_SECTION(0)) < 1) :
+        Infbox "FINAL len([L]WORDS_SECTION(0)) < 1"
+        Break
+      Endif
+
+      #Tratamento da sessão do csv
+      #STEP guarda length
+      SECTION_LENGTH = func GET_CHAR_ARRAY_LENGTH(WORDS_SECTION)
+      #! GET_CHAR_ARRAY_LENGTH would be diferent of maxtab
+#      If([L]LINE_NUM>1170):[V]Y_SHOW_INF_BOXES=1:Endif
+      #STEP encaminha tipo
+      Case [L]WORDS_SECTION(0) # primeira palavra identificadora
+        When 'P' : # se for propriedade
+          Gosub TRA_X3_CSV_WHEN_IS_P
+        When 'A' : # se for atributo
+          Gosub TRA_X3_CSV_WHEN_IS_A
+        When 'C' # se for clob
+          Gosub TRA_X3_CSV_WHEN_IS_C
+        When 'V','FV' :
+          # value used inside 'P'|'A'|'C'
+          # final value used inside 'C'
+          Errbox "Erro, não pode cair aqui"
+        When Default
+          Errbox "Erro, não pode cair aqui"
+          Errbox WORDS_SECTION(0), func CONCAT_CHAR_ARRAY_255(WORDS_SECTION)
+          Errbox "Fim, erro"
+      Endcase
+      #FIXME remove it
+#      Call COPY_CHAR_ARRAY(WORDS_SECTION, B, 0, func GET_CHAR_ARRAY_LENGTH(WORDS_SECTION))
+#      If (func COMPARE_CHAR_ARRAYS(A,B) <> 0)
+#        Infbox "Not equals:", func CONCAT_CHAR_ARRAY_255(A), func CONCAT_CHAR_ARRAY_255(B) Titled "("+WORDS_SECTION(0)+")After Line " + num$(LINE_NUM)
+#      Endif
+#    If(OK=0):Errbox "error" Titled num$(LINE_NUM) : Endif
+
+    Until (FSTATUS_MAIN <> 0) :#(fstat<>0 and (len(WORDS_SECTION(0)) < 1 or dim(WORDS_SECTION) < 1))
+    Infbox "Close file: " + CSV_FILE_PATH, 'last LINENUM: ' + num$(LINE_NUM)
+  Openi : # close file
+  #STEP END CONSUME_FILE_AND_POPULATE_CLASS
+End
+
+#**
+#* Validadion on startup for CLASS_INSTANCE
+#*
+#* <br><b>Member of</b> - Subprog <b>CONSUME_FILE_AND_POPULATE_CLASS</b>
+#* <br><b>Member of</b> - Subprog <b>CREATE_CLASS_PROPERTY_INSTANCE_IF_NOT_EXISTS</b></br>
+#*
+#* @param CLASS_INSTANCE {Instance} - Local | Variable
+#* @param CLASS_NAME {Char} - Local | Value | Variable
+#*
+#* @see [V]Y_SHOW_INF_BOXES {Integer} as BOOLEAN - Global
+#*
+#* @private
+#*!
+$INITIAL_VALIDATION_FOR_CLASS_INSTANCE
+  #check CLASS_INSTANCE instance
+  If(CLASS_INSTANCE <> null)
+    If (!!Y_SHOW_INF_BOXES) : Infbox "CLASS_INSTANCE exist" : Endif
+  Else
+    Errbox "CLASS_INSTANCE must not be null"
+    Errbox ""+0 : # just to cash
+  Endif
+
+  #type cast, if necessary
+  If(CLASS_INSTANCE.ObjectType <> CLASS_NAME)
+#    Infbox 'Tipo de objeto diferête do esperado, fazendo cast from('+CLASS_INSTANCE.ObjectType+')' Titled "3Objecttype expected ("+CLASS_NAME+")"
+    CLASS_INSTANCE = cast(CLASS_INSTANCE, CLASS_NAME)
+#    Infbox 'Novo Tipo:'+ CLASS_INSTANCE.ObjectType Titled "3Objecttype"
+  Else
+    If (!!Y_SHOW_INF_BOXES) : Infbox "CLASS_INSTANCE type is " + CLASS_INSTANCE.ObjectType : Endif
+  Endif
+Return
+#**
+#* Read CSV SECTION Using [YFL]
+#*
+#* <br><b>Member of</b> - Subprog <b>CONSUME_FILE_AND_POPULATE_CLASS</b></br>
+#*
+#* @param WORDS_SECTION {Char(255)(0..)} - Local | Variable
+#* @param LINE_NUM {Integer} - Local | Variable
+#* @param FSTATUS_MAIN {Integer} - Local | Variable
+#*
+#* <pre><b>Example(Like)</b>
+#*  Local Char <b>WORDS_SECTION</b>(255)(0..)
+#*  Local Integer <b>LINE_NUM</b>
+#* </pre>
+#*
+#* @protected
+#*!
+$READ_CSV_LINE
+  LINE_NUM += 1
+  Raz WORDS_SECTION
+  #STEP read line as char array
+  Rdseq WORDS_SECTION Using [YFL]
+  FSTATUS_MAIN = fstat
+Return
+#**
+#* TRA X3 CSV WHEN SECTION IS P
+#* <br><b>Member of</b> - Subprog <b>CONSUME_FILE_AND_POPULATE_CLASS</b></br>
+#*
+#* @param CSV_FILE_PATH {Char} - Local | Value | Variable
+#* @param CLASS_NAME {Char} - Local | Value | Variable
+#* @param CLASS_INSTANCE {Instance} - Local | Variable
+#* @param WORDS_SECTION {Char(255)(0..)} - Local | Variable
+#* @param PARENT_SECTION {Char(255)(0..)} - Local | Variable
+#* @param SECTION_LENGTH {Integer} - Local | Variable
+#* @param PARENT_SECTION_LENGTH {Integer} - Local | Variable
+#* @param LINE_NUM {Integer} - Local | Variable
+#*
+#*
+#* <pre><b>Example(Like)</b>
+#*  Value Char <b>CSV_FILE_PATH</b>
+#*  Value Char <b>CLASS_NAME</b>
+#*  Variable Instance <b>CLASS_INSTANCE</b> Using OBJECT
+#*  Local Char <b>WORDS_SECTION</b>(255)(0..)
+#*  Local Char <b>PARENT_SECTION</b>(255)(0..)
+#*  Local Integer <b>SECTION_LENGTH</b>
+#*  Local Integer <b>PARENT_SECTION_LENGTH</b>
+#*  Local Integer <b>LINE_NUM</b>
+#* </pre>
+#*
+#* @protected
+#*!
+$TRA_X3_CSV_WHEN_IS_P
+  Local Char CURRENT_PROPERTY_PATH(255)
+  Local Char CURRENT_PROPERTY_NAME(255)
+  Local Char CURRENT_PROPERTY_VALUE(255)
+  Local Integer CURRENT_PROPERTY_WAS_NEEDED_TO_REPLACE_UNDERLINE
+  Local Integer CURRENT_PROPERTY_IS_ARRAY
+  Local Integer CURRENT_PROPERTY_ARRAY_INDEX
+
+#     Infbox "LINE(" + num$([L]LINE_NUM) + ")"
+#&           + chr$(10) + "SECTION_LENGTH:" - num$([L]SECTION_LENGTH)
+#&           + chr$(10) + "VALUE:" - func CONCAT_CHAR_ARRAY_255([L]WORDS_SECTION)
+#&           + chr$(10) + "Last word:"- [L]WORDS_SECTION([L]SECTION_LENGTH-1)
+#&          Titled "(P) CONSUME_NFE_PROC"
+
+  #STEP guarda o pai, se tiver, senão vem 0
+  PARENT_SECTION_LENGTH = SECTION_LENGTH
+  Call COPY_CHAR_ARRAY(WORDS_SECTION, PARENT_SECTION, 0, PARENT_SECTION_LENGTH-1)
+
+  If (!fstat)
+    Gosub READ_CSV_LINE :#WORDS_SECTION(0) === 'V'
+
+    SECTION_LENGTH = func GET_CHAR_ARRAY_LENGTH(WORDS_SECTION)
+    #! GET_CHAR_ARRAY_LENGTH would be diferent of maxtab
+    #! in this case maxtab(WORDS_SECTION) == func GET_CHAR_ARRAY_LENGTH(WORDS_SECTION) == 2
+
+
+    #STEP GET Propery name
+    CURRENT_PROPERTY_NAME = PARENT_SECTION(PARENT_SECTION_LENGTH-1)
+    # sounds like #[L]CURRENT_PROPERTY_NAME = ctrans([L]PARENT_SECTION([L]PARENT_SECTION_LENGTH-1), '_0', '')
+    Call SCRIPT_TO_RESOLVE_UNDERLINE(CURRENT_PROPERTY_NAME,
+&                                    CURRENT_PROPERTY_WAS_NEEDED_TO_REPLACE_UNDERLINE,
+&                                    CURRENT_PROPERTY_IS_ARRAY,
+&                                    CURRENT_PROPERTY_ARRAY_INDEX)
+    CURRENT_PROPERTY_NAME = toupper(CURRENT_PROPERTY_NAME)
+
+    #STEP GET Property value
+    CURRENT_PROPERTY_VALUE = WORDS_SECTION(SECTION_LENGTH-1) :# usually is index 1, last value of line
+
+  #    Infbox "LINE("+num$([L]LINE_NUM)+")"
+  #&         ,"PARENT_PATH:" - func CONCAT_CHAR_ARRAY_255(PARENT_SECTION)
+  #&         ,"TYPE:" - [L]WORDS_SECTION(0)
+  #&         ,"isArray:" - num$(CURRENT_PROPERTY_IS_ARRAY)
+  #&         ,"index:" - num$(CURRENT_PROPERTY_ARRAY_INDEX)
+  #&         ,"Property:" - [L]CURRENT_PROPERTY_NAME
+  #&         ,"Value:" - [L]CURRENT_PROPERTY_VALUE
+  #&         Titled "(P) CONSUME_NFE_PROC"
+
+    #STEP mount P_RESULT_PATH
+    Local Char P_RESULT_PATH(255)
+    Local Integer P_RESULT_STATUS, P_INITIAL_INDEX, P_FINAL_INDEX
+    [L]P_INITIAL_INDEX = 2 : # poque o 0=='P' e 1==Root
+    [L]P_FINAL_INDEX = [L]PARENT_SECTION_LENGTH - 2 : # -2 porque a última string é a property e o array começa em 0
+
+  #  If (LINE_NUM > 107) : [V]Y_SHOW_DEBUG=1 : Endif
+    # checa criação de classe
+    [L]P_RESULT_STATUS = func CREATE_CLASS_PROPERTY_INSTANCE_IF_NOT_EXISTS(CLASS_INSTANCE, CLASS_NAME, PARENT_SECTION, P_INITIAL_INDEX, P_FINAL_INDEX, P_RESULT_PATH)
+
+    If([L]P_RESULT_STATUS <> [V]CST_ANOTDEFINED)
+      [L]P_RESULT_PATH = 'CLASS_INSTANCE' + [L]P_RESULT_PATH
+  #    Infbox "P_RESULT_STATUS(OK)  - P_RESULT_PATH='"+P_RESULT_PATH+"'"
+
+
+      If (!![V]Y_SHOW_INF_BOXES)
+        Infbox "TYPE:" - [L]WORDS_SECTION(0)
+&             ,"Path :" - [L]P_RESULT_PATH
+&             ,"Property :" - [L]CURRENT_PROPERTY_NAME
+&             ,"Value:" - [L]CURRENT_PROPERTY_VALUE
+&             Titled "(P) CONSUME_NFE_PROC - LINE("+num$([L]LINE_NUM)+")"
+      Endif
+
+      If(evalue(P_RESULT_PATH + ' <> null'))
+  #      Infbox "P_RESULT_PATH exists"
+        Local Char JSON_PROPERTY_NAME(64), JSON_PARENT_NAME(64)         :#Value
+        Local Char RESULT_FIELD_NAME(64), RESULT_FIELD_LINKED_CLASS(64) :#Variable
+        Local Integer HAS_ERROR, RESULT_FIELD_TYPE
+        Local Char ANY_CHAR_AUX(32)
+
+        # resolve JSON_PARENT_NAME
+        Call SPLIT_INTO_2_STRINGS_BY_LAST_UNDERLINE(PARENT_SECTION(PARENT_SECTION_LENGTH-2), JSON_PARENT_NAME, ANY_CHAR_AUX)
+        # resolve JSON_PROPERTY_NAME
+        JSON_PROPERTY_NAME = CURRENT_PROPERTY_NAME
+
+        HAS_ERROR = func GET_CLASS_PROPERTY_DATA_BY_JSON(JSON_PARENT_NAME, JSON_PROPERTY_NAME, RESULT_FIELD_NAME, RESULT_FIELD_LINKED_CLASS, RESULT_FIELD_TYPE)
+        # when array resolve CURRENT_PROPERTY_NAME
+        If(CURRENT_PROPERTY_IS_ARRAY > 0)
+          RESULT_FIELD_NAME += "(" + num$(CURRENT_PROPERTY_ARRAY_INDEX) + ")"
+        Endif
+        Infbox (P_RESULT_PATH +'.'+ RESULT_FIELD_NAME)
+        If(!HAS_ERROR)
+          #* 1 - Menu local
+          #* 2 - Inteiro curto
+          #* 3 - Inteiro longo
+          #* 4 - Décimal
+          #* 5 - Flutuante
+          #* 6 - Duplo
+          #* 7 - Alfanumérico
+          #* 8 - Data
+          #* 9 - Blob
+          #* 10 - Clob
+          #* 11 - Uuid
+          #*! 12 - Datetime
+          Case [L]RESULT_FIELD_TYPE
+            When 1, 2, 3, 4, 5, 6, 12:
+              Assign (P_RESULT_PATH+'.'+RESULT_FIELD_NAME) With val(CURRENT_PROPERTY_VALUE)
+              #: Infbox 'numero'-num$(evalue((P_RESULT_PATH+'.'+RESULT_FIELD_NAME)))
+            When 7:
+              Assign (P_RESULT_PATH+'.'+RESULT_FIELD_NAME) With CURRENT_PROPERTY_VALUE
+              #: Infbox 'texto'-evalue((P_RESULT_PATH+'.'+RESULT_FIELD_NAME))
+            When 8:
+              Local Integer DATA_HAS_ERROR
+              Local Date DATE_RESULT
+              DATE_HAS_ERROR = func YDATEUTILS.EXTRACT_DATE_FROM_STRING((CURRENT_PROPERTY_VALUE), DATE_RESULT, '')
+              If(!DATE_HAS_ERROR)
+                Assign (P_RESULT_PATH+'.'+RESULT_FIELD_NAME) With DATE_RESULT
+              Else
+                Errbox "Erro de converção "+(P_RESULT_PATH+'.'+RESULT_FIELD_NAME) Titled 'TRA_X3_CSV_WHEN_IS_P'
+              Endif
+            When 10:
+              Local Clbfile AUX_CLOB: AUX_CLOB = evalue(CURRENT_PROPERTY_VALUE)
+              Assign (P_RESULT_PATH+'.'+RESULT_FIELD_NAME) With AUX_CLOB
+            When Default:
+              Assign (P_RESULT_PATH+'.'+RESULT_FIELD_NAME) With (CURRENT_PROPERTY_VALUE)
+          Endcase
+        Else
+          Errbox 'Não foi possivel achar:','GET_CLASS_PROPERTY_DATA_BY_JSON(',JSON_PARENT_NAME, JSON_PROPERTY_NAME, RESULT_FIELD_NAME, RESULT_FIELD_LINKED_CLASS, RESULT_FIELD_TYPE
+        Endif
+
+
+  #              # detect type
+  #              Infbox mid$([L]CURRENT_PROPERTY_VALUE,2,1) Titled '([L]CURRENT_PROPERTY_VALUE,2,1)'
+  #              Case mid$([L]CURRENT_PROPERTY_VALUE,2,1)
+  #                When '0','1','2','3','4','5','6','7','8','9':#number
+  #                  [L]STRING_SET_COMMAND += 'val(' + [L]CURRENT_PROPERTY_VALUE + ')'
+  #                  Infbox [L]STRING_SET_COMMAND Titled 'STRING_SET_COMMAND'
+  #
+  #                  # alias for STRING_SET_COMMAND dynamic
+  #                  Assign ([L]P_RESULT_PATH + '.' + [L]CURRENT_PROPERTY_NAME) With val([L]CURRENT_PROPERTY_VALUE)
+  #                  Infbox num$(evalue([L]P_RESULT_PATH + '.' + [L]CURRENT_PROPERTY_NAME)) Titled 'Get '+[L]P_RESULT_PATH + '.' + [L]CURRENT_PROPERTY_NAME + ' value'
+  #
+  #                When Default : # string
+  #                  [L]STRING_SET_COMMAND += [L]CURRENT_PROPERTY_VALUE
+  #                  Infbox [L]STRING_SET_COMMAND Titled 'STRING_SET_COMMAND'
+  #
+  #                  # alias for STRING_SET_COMMAND dynamic
+  #                  Assign ([L]P_RESULT_PATH + '.' + [L]CURRENT_PROPERTY_NAME) With [L]CURRENT_PROPERTY_VALUE
+  #                  Infbox evalue([L]P_RESULT_PATH + '.' + [L]CURRENT_PROPERTY_NAME) Titled 'Get '+[L]P_RESULT_PATH + '.' + [L]CURRENT_PROPERTY_NAME + ' value'
+  #              Endcase
+
+      Else
+        Errbox "Erro P_RESULT_PATH not exist" Titled "(P) CONSUME_NFE_PROC - LINE("+num$([L]LINE_NUM)+")"
+        Errbox ""+0 : # just to crash
+      Endif
+    Else
+      Errbox "P_RESULT_STATUS(NOT OK) - NOT DEFINED"
+&           ,"using P_RESULT_PATH = " + [L]P_RESULT_PATH
+&           ,CLASS_NAME, func CONCAT_CHAR_ARRAY_255(PARENT_SECTION)
+&           Titled 'LINE_NUM('+num$(LINE_NUM)+')'
+    Endif
+  Else
+    OK=0
+    Errbox "ERROR on read line " + num$(LINE_NUM) Titled 'ERROR TRA_X3_CSV_WHEN_IS_P READ'
+    OK=""+0 :#just to cash
+  Endif
+Return
+#**
+#* TRA X3 CSV WHEN SECTION IS A
+#* <br><b>Member of</b> - Subprog <b>CONSUME_FILE_AND_POPULATE_CLASS</b></br>
+#*
+#* @param CSV_FILE_PATH {Char} - Local | Value | Variable
+#* @param CLASS_NAME {Char} - Local | Value | Variable
+#* @param CLASS_INSTANCE {Instance} - Local | Variable
+#* @param WORDS_SECTION {Char(255)(0..)} - Local | Variable
+#* @param PARENT_SECTION {Char(255)(0..)} - Local | Variable
+#* @param SECTION_LENGTH {Integer} - Local | Variable
+#* @param PARENT_SECTION_LENGTH {Integer} - Local | Variable
+#* @param LINE_NUM {Integer} - Local | Variable
+#*
+#*
+#* <pre><b>Example(Like)</b>
+#*  Value Char <b>CSV_FILE_PATH</b>
+#*  Value Char <b>CLASS_NAME</b>
+#*  Variable Instance <b>CLASS_INSTANCE</b> Using OBJECT
+#*  Local Char <b>WORDS_SECTION</b>(255)(0..)
+#*  Local Char <b>PARENT_SECTION</b>(255)(0..)
+#*  Local Integer <b>SECTION_LENGTH</b>
+#*  Local Integer <b>PARENT_SECTION_LENGTH</b>
+#*  Local Integer <b>LINE_NUM</b>
+#* </pre>
+#*
+#* @protected
+#*!
+$TRA_X3_CSV_WHEN_IS_A
+  # read 'V' value
+  If (!fstat)
+    Gosub READ_CSV_LINE :# pegar o valor do V
+    # count length = usually need to be 2
+    [L]SECTION_LENGTH = func GET_CHAR_ARRAY_LENGTH([L]WORDS_SECTION)
+  Endif
+  #do anything
+Return
+#**
+#* TRA X3 CSV WHEN SECTION IS C
+#* <br><b>Member of</b> - Subprog <b>CONSUME_FILE_AND_POPULATE_CLASS</b></br>
+#*
+#* @param CSV_FILE_PATH {Char} - Local | Value | Variable
+#* @param CLASS_NAME {Char} - Local | Value | Variable
+#* @param CLASS_INSTANCE {Instance} - Local | Variable
+#* @param WORDS_SECTION {Char(255)(0..)} - Local | Variable
+#* @param PARENT_SECTION {Char(255)(0..)} - Local | Variable
+#* @param SECTION_LENGTH {Integer} - Local | Variable
+#* @param PARENT_SECTION_LENGTH {Integer} - Local | Variable
+#* @param LINE_NUM {Integer} - Local | Variable
+#*
+#*
+#* <pre><b>Example(Like)</b>
+#*  Value Char <b>CSV_FILE_PATH</b>
+#*  Value Char <b>CLASS_NAME</b>
+#*  Variable Instance <b>CLASS_INSTANCE</b> Using OBJECT
+#*  Local Char <b>WORDS_SECTION</b>(255)(0..)
+#*  Local Char <b>PARENT_SECTION</b>(255)(0..)
+#*  Local Integer <b>SECTION_LENGTH</b>
+#*  Local Integer <b>PARENT_SECTION_LENGTH</b>
+#*  Local Integer <b>LINE_NUM</b>
+#* </pre>
+#*
+#* @protected
+#*!
+$TRA_X3_CSV_WHEN_IS_C
+  #STEP INIT TRA_X3_CSV_WHEN_IS_C
+#    Infbox "LINE(" + num$([L]LINE_NUM) + ")"
+#&         ,"SECTION_LENGTH:" - num$([L]SECTION_LENGTH)
+#&         ,"VALUE:" - func CONCAT_CHAR_ARRAY_255([L]WORDS_SECTION)
+#&         ,"Last word:"- [L]WORDS_SECTION([L]SECTION_LENGTH-1)
+#&         Titled "(C) CONSUME_NFE_PROC"
+
+  #**
+  #* Numero de dimesoes DEFAULT 2 <br>
+  #* EX: V;"texto texto texto......"
+  #*!
+  Local Integer NUM_DIM_VALUE : [L]NUM_DIM_VALUE = 2
+  Local Integer LAST_CLOB_INDEX : [L]LAST_CLOB_INDEX = 0
+  #Local Integer MAX_CLOB_INTERNAL_INDEX : [L]MAX_CLOB_INTERNAL_INDEX = 4096
+
+
+  #Local Char CLOB_CHILDREN(255)([L]NUM_DIM_VALUE, [L]LAST_CLOB_INDEX)
+  #Local Char CLOB_CHILDREN_AUX(255)([L]NUM_DIM_VALUE, [L]MAX_CLOB_INTERNAL_INDEX)
+
+
+  #STEP guarda o pai
+  [L]PARENT_SECTION_LENGTH = [L]SECTION_LENGTH #func GET_CHAR_ARRAY_LENGTH([L]PARENT_SECTION)
+  Call COPY_CHAR_ARRAY([L]WORDS_SECTION, [L]PARENT_SECTION, 0, PARENT_SECTION_LENGTH-1)
+
+  # se tiver tudo certo, seguir para pegar o valor em loop clob
+  # read 'V'
+  If (!fstat)
+    Repeat
+      [L]LAST_CLOB_INDEX += 1
+
+      # pegar o valor do V
+      Gosub READ_CSV_LINE
+
+      [L]SECTION_LENGTH = func GET_CHAR_ARRAY_LENGTH([L]WORDS_SECTION)
+
+
+      If(WORDS_SECTION(0) = 'FV')
+        LAST_CLOB_INDEX=([L]LAST_CLOB_INDEX -1)
+        Break :# final line
+      Endif
+    Until (fstat <> 0)
+  Endif
+
+  If (!![V]Y_SHOW_INF_BOXES)
+    Infbox "LINE(" + num$([L]LINE_NUM) + "); LAST_INDEX:"- num$([L]LAST_CLOB_INDEX)+"; LENGTH:"- num$([L]LAST_CLOB_INDEX+1)
+  Endif
+
+  #do something
+#  Infbox "LINE("+num$([L]LINE_NUM)+")"
+#&       ,"PARENT_PATH:" - func CONCAT_CHAR_ARRAY_255([L]PARENT_SECTION)
+#&       ,"TYPE:" - [L]WORDS_SECTION(0)
+#&       ,"Property :" - ctrans([L]PARENT_SECTION([L]PARENT_SECTION_LENGTH-1), '_0', '')
+#&       ,"LAST_CLOB_INDEX:" - num$(LAST_CLOB_INDEX)
+#&                   Titled "(C) CONSUME_NFE_PROC"
+
+  #STEP END TRA_X3_CSV_WHEN_IS_C
+Return
+
+#**
+#* Create the class property Collections Instances, following the PROPERTY_HIERARCHY.
+#* (If the collection instance not exist)
+#* <br><b>Else just pass</b>
+#* <br>
+#* <br>!! PROPERTY_PATH_RESULT returns the String path to use dynamically (with evalue())
+#*
+#*
+#* @param CLASS_INSTANCE {Instance(1..)} - Variable
+#* @param CLASS_NAME {Char}
+#* @param PROPERTY_HIERARCHY {Char()(0..)} - Variable
+#* @param INITIAL_INDEX {Integer} - like 2
+#* @param FINAL_INDEX {Integer} - like (legth -2)
+#* @param PROPERTY_PATH_RESULT {Char} - Variable - String path to use dynamically (with evalue())
+#*
+#* @return {[V]CST_AOK | [V]CST_ANOTDEFINED | ...}
+#*
+#* <h3>Not Ok (equals to [V]CST_ANOTDEFINED)</h3>
+#* <ul>
+#*    <li>[V]CST_ANOTDEFINED</li>
+#*    Example: <code>[L]RESULT = [V]CST_ANOTDEFINED</code>
+#* </ul>
+#*
+#* <h3>Ok (diferent of [V]CST_ANOTDEFINED)</h3>
+#* <ul>
+#*    <li>
+#*      Example: <code>[L]RESULT <> [V]CST_ANOTDEFINED</code>
+#*    </li>
+#* </ul>
+#*
+#*!
+Funprog CREATE_CLASS_PROPERTY_INSTANCE_IF_NOT_EXISTS(CLASS_INSTANCE, CLASS_NAME, PROPERTY_HIERARCHY, INITIAL_INDEX, FINAL_INDEX, PROPERTY_PATH_RESULT)
+  #STEP INIT CREATE_CLASS_PROPERTY_INSTANCE_IF_NOT_EXISTS
+  Variable Instance CLASS_INSTANCE(1..) Using OBJECT
+  Value Char CLASS_NAME
+  Variable Char PROPERTY_HIERARCHY()(0..)
+  Value Integer INITIAL_INDEX, FINAL_INDEX
+  Variable Char PROPERTY_PATH_RESULT
+
+  Gosub INITIAL_VALIDATION_FOR_CLASS_INSTANCE :# CLASS_NAME and CLASS_INSTANCE
+
+  # Local Constant
+  Local Integer CONST_OK : CONST_OK = [V]CST_ANOTDEFINED + 1
+  Local Integer CONST_NOT_OK : CONST_NOT_OK = [V]CST_ANOTDEFINED
+  # Locals vars
+  Local Integer RESPONSE_RESULT, CURRENT_ARRAY_INDEX
+  Local Char HISTORY_PROPERTY(255), CURRENT_PROPERTY(255), LAST_PROPERTY(255)
+  Local Char PARENT_JSON_NAME(64) , FIELD_JSON_NAME(64)
+  Local Char X3_CLASS_NAME(64)
+  # booleans
+  Local Integer CURRENT_PATH_IS_ARRAY,  WAS_NEEDED_TO_REPLACE_UNDERLINE
+  # AUXs internals
+  Local Integer I, NOTHING
+  Local Char HISTORY_STRING(255)  , COLLECTION_STRING(255)
+
+  #STEP startup LAST_PROPERTY as CLASS_NAME
+  If(pat(CLASS_NAME,'C_*'))
+    CLASS_NAME = right$(CLASS_NAME, 3)
+  Endif
+  LAST_PROPERTY = func GET_CODJSON_BY_CLASS(CLASS_NAME)
+  If(len(LAST_PROPERTY)<1)
+    Errbox "CLASS_NAME did not have a COD JSON"
+    Errbox ""+0 :# just to break
+  Endif
+
+  #STEP for each into PROPERTY_HIERARCHY range
+  For [L]I=INITIAL_INDEX To FINAL_INDEX
+    CURRENT_PATH_IS_ARRAY = 0
+    CURRENT_ARRAY_INDEX = 0
+
+    If(I <= FINAL_INDEX)
+      CURRENT_PROPERTY = PROPERTY_HIERARCHY(I)
+
+      #STEP tratar underline se necessário
+      Call SCRIPT_TO_RESOLVE_UNDERLINE(CURRENT_PROPERTY,
+&                                      WAS_NEEDED_TO_REPLACE_UNDERLINE,
+&                                      CURRENT_PATH_IS_ARRAY,
+&                                      CURRENT_ARRAY_INDEX)
+
+
+      PARENT_JSON_NAME = (LAST_PROPERTY)
+      FIELD_JSON_NAME = (CURRENT_PROPERTY)
+
+      #STEP set X3_CLASS_NAME with GET_CLASS_NAME_BY_JSON
+      X3_CLASS_NAME = '' : #clenup
+      X3_CLASS_NAME = func GET_CLASS_NAME_BY_JSON(PARENT_JSON_NAME, FIELD_JSON_NAME)
+
+      #FIXME remove it
+#      Infbox 'X3_CLASS_NAME="'+X3_CLASS_NAME+'" from GET_CLASS_NAME_BY_JSON("'+PARENT_JSON_NAME+'", "'+FIELD_JSON_NAME+'")'
+
+      If(len(X3_CLASS_NAME)>0)
+        X3_CLASS_NAME = 'C_' + toupper(X3_CLASS_NAME)
+      Else
+        [L]RESPONSE_RESULT = [L]CONST_NOT_OK
+        Errbox 'not found - ("'+(PARENT_JSON_NAME)+'", "'+(FIELD_JSON_NAME)+'") = "'+X3_CLASS_NAME+'"' Titled "ERR->GET_CLASS_NAME_BY_JSON"
+        Break
+      Endif
+
+
+
+      #STEP create access string parents
+      HISTORY_STRING = ''
+      [L]HISTORY_STRING = 'CLASS_INSTANCE' + func RESOLVE_PARENT_PATH(PROPERTY_HIERARCHY, INITIAL_INDEX, I)
+
+
+
+      #FIXME remove it
+#      Infbox "Line(" + num$(I) + ") - AFTER"
+#&           ,"X3_CLASS_NAME:" - X3_CLASS_NAME
+#&           ,"CURRENT_PROPERTY:" - CURRENT_PROPERTY
+#&           ,"CURRENT_ARRAY_INDEX:" + num$([L]CURRENT_ARRAY_INDEX)
+#&           ,"CURRENT_PATH_IS_ARRAY:" + num$([L]CURRENT_PATH_IS_ARRAY)
+#&           ,"HISTORY_STRING:" - HISTORY_STRING
+
+      If(evalue([L]HISTORY_STRING + ' <> null'))
+        If (!![V]Y_SHOW_INF_BOXES)
+          Infbox evalue('"'+ [L]HISTORY_STRING +' exist"') Titled "CLASS_INSTANCE>Index("+num$(I)+")"
+        Endif
+        # continue
+      Else
+        #XXX I don't know if it's possible
+        [L]RESPONSE_RESULT = [L]CONST_NOT_OK
+        Errbox evalue('"'+ [L]HISTORY_STRING +' not exist"') Titled "CLASS_INSTANCE>Index("+num$(I)+")"
+        Break
+      Endif
+
+
+      #STEP Save current prop as last prop
+      LAST_PROPERTY = CURRENT_PROPERTY
+      If(CURRENT_PATH_IS_ARRAY <> 0)
+        CURRENT_PROPERTY += '(' + num$([L]CURRENT_ARRAY_INDEX) + ')'
+      Endif
+
+      #STEP create access property string
+      COLLECTION_STRING=''
+      COLLECTION_STRING = [L]HISTORY_STRING + '.'+ toupper(CURRENT_PROPERTY)
+
+
+      #STEP test access property string
+      If (evalue([L]COLLECTION_STRING + ' <> null'))
+        [L]RESPONSE_RESULT = [L]CONST_OK
+        #just continue
+      Else
+        If (!![V]Y_SHOW_INF_BOXES)
+          #FIXME remove it
+          Infbox evalue('"'+ [L]COLLECTION_STRING +' not exist"') + chr$(10) + "ADD>" - [L]CURRENT_PROPERTY Titled "CLASS_INSTANCE>Index("+num$(I)+")"
+          Infbox 'HIERARCHY:'- func CONCAT_CHAR_ARRAY_255(PROPERTY_HIERARCHY)
+&               ,'access:' - [L]COLLECTION_STRING
+&               ,'Comand: "fmet CLASS_INSTANCE' + [L]HISTORY_PROPERTY
+&                            + '.ADDLINE("' + toupper(LAST_PROPERTY) + '", [V]CST_ALASTPOS)"'
+&                Titled "CLASS_INSTANCE>Index("+num$(I)+")"
+        Endif
+
+        #STEP create field
+        [L]RESPONSE_RESULT = evalue ('fmet CLASS_INSTANCE' + [L]HISTORY_PROPERTY + '.ADDLINE("' + toupper(LAST_PROPERTY) + '", [V]CST_ALASTPOS)' )
+        If (!![V]Y_SHOW_INF_BOXES)
+          Infbox "NewIntance of " + [L]X3_CLASS_NAME Titled "CLASS_INSTANCE>Index("+num$(I)+")"
+        Endif
+
+        #STEP create instance
+#        Infbox [L]COLLECTION_STRING + ' = NewInstance' - [L]X3_CLASS_NAME - 'AllocGroup null'
+        [L]NOTHING = evalue ([L]COLLECTION_STRING + ' = NewInstance' - [L]X3_CLASS_NAME - 'AllocGroup null')
+
+        #STEP final check review for not defined
+        If([L]RESPONSE_RESULT <> [V]CST_ANOTDEFINED)
+          [L]RESPONSE_RESULT = [L]CONST_OK
+
+          If (!![V]Y_SHOW_INF_BOXES)
+            Infbox COLLECTION_STRING + '(' + X3_CLASS_NAME + '): IS DEFINED' Titled "CLASS_INSTANCE>Index("+num$(I)+")"
+          Endif
+        Else
+          [L]RESPONSE_RESULT = [L]CONST_NOT_OK
+          Errbox [L]COLLECTION_STRING + '(' + X3_CLASS_NAME + '): IS NOT DEFINED' Titled "CLASS_INSTANCE>Index("+num$(I)+")"
+        Endif
+      Endif
+
+      #STEP final loop assign
+      HISTORY_PROPERTY += '.'+ toupper(CURRENT_PROPERTY)
+
+      #STEP final loop check review for null
+      If(evalue([L]COLLECTION_STRING + ' <> null'))
+        [L]RESPONSE_RESULT = [L]CONST_OK
+
+        If (!![V]Y_SHOW_INF_BOXES)
+          Infbox [L]COLLECTION_STRING + '(' + X3_CLASS_NAME + '): IS NOT NULL' Titled "CLASS_INSTANCE>Index("+num$(I)+")"
+        Endif
+      Else
+        [L]RESPONSE_RESULT = [L]CONST_NOT_OK
+        If (!![V]Y_SHOW_INF_BOXES)
+          Infbox [L]COLLECTION_STRING + '(' + X3_CLASS_NAME + '): IS NULL' Titled "CLASS_INSTANCE>Index("+num$(I)+")"
+        Endif
+        Break
+      Endif
+    Endif
+
+    If(I = FINAL_INDEX)
+      #Infbox "último valor"
+      # último valor
+    Endif
+  Next I
+
+  # set result
+  PROPERTY_PATH_RESULT = [L]HISTORY_PROPERTY
+#  Infbox "PROPERTY_PATH_RESULT: " + PROPERTY_PATH_RESULT
+  #STEP END CREATE_CLASS_PROPERTY_INSTANCE_IF_NOT_EXISTS
+End RESPONSE_RESULT
+
+#$RAZ_CURRENT_PATH_IS_ARRAY
+#  Errbox "Erro [L]CURRENT_PATH_IS_ARRAY check"
+#  Raz CURRENT_PATH_IS_ARRAY
+#Return
+
+#**
+#* Resolve e concatena o caminhe de propiedades do cusom CSV,
+#* util para montar rápidamente o path pai
+#*
+#* <h1>!stop when (index == FINAL_INDEX)!</h1>
+#*
+#* @param STRING_ARRAY {Char()(0..)}
+#* @param INITIAL_INDEX {Integer} - start using (index = INITIAL_INDEX)
+#* @param FINAL_INDEX {Integer} - stop when (index == FINAL_INDEX)
+#*!
+Funprog RESOLVE_PARENT_PATH(STRING_ARRAY, INITIAL_INDEX, FINAL_INDEX)
+  Variable Char STRING_ARRAY()(0..)
+  Value Integer INITIAL_INDEX
+  Value Integer FINAL_INDEX
+
+  Local Char STRING_RESULT(255)
+  Local Integer INDEX
+  Local Char CURRENT_PROPERTY(255)
+  Local Integer WAS_NEEDED_TO_REPLACE_UNDERLINE
+  Local Integer CURRENT_PATH_IS_ARRAY
+  Local Integer CURRENT_ARRAY_INDEX
+
+  If(!![V]Y_SHOW_DEBUG)
+    Infbox   chr$(10) - "STRING_ARRAY: " + func CONCAT_CHAR_ARRAY_255(STRING_ARRAY)
+&          - chr$(10) - "INITIAL_INDEX: " + num$(INITIAL_INDEX)
+&          - chr$(10) - "FINAL_INDEX: " + num$(FINAL_INDEX)
+&         Titled "RESOLVE_PARENT_PATH"
+  Endif
+
+  For [L]INDEX=INITIAL_INDEX To FINAL_INDEX
+    If(INDEX = FINAL_INDEX)
+      If(!![V]Y_SHOW_DEBUG)
+        Infbox  "INITIAL_INDEX == FINAL_INDEX : stop", "F: STRING_RESULT : " + STRING_RESULT
+&             Titled "RESOLVE_PARENT_PATH"
+      Endif
+      Break # stop in current variable
+    Endif
+
+    CURRENT_PROPERTY = STRING_ARRAY(INDEX)
+
+    # tratar underline se necessário
+    CURRENT_PROPERTY = func RESOLVE_PROP_UNDERLINE(CURRENT_PROPERTY)
+    # OLD
+    #    Call SCRIPT_TO_RESOLVE_UNDERLINE(CURRENT_PROPERTY,
+    #&                                    WAS_NEEDED_TO_REPLACE_UNDERLINE,
+    #&                                    CURRENT_PATH_IS_ARRAY,
+    #&                                    CURRENT_ARRAY_INDEX)
+    #
+    #    CURRENT_PROPERTY = toupper(CURRENT_PROPERTY)
+    #    If(CURRENT_PATH_IS_ARRAY > 0)
+    #      CURRENT_PROPERTY += "(" + num$(CURRENT_ARRAY_INDEX) + ")"
+    #    Endif
+
+
+    STRING_RESULT += '.' + toupper(CURRENT_PROPERTY)
+  Next [L]INDEX
+  If(!![V]Y_SHOW_DEBUG)
+    Infbox "STRING_ARRAY: " + func CONCAT_CHAR_ARRAY_255(STRING_ARRAY)
+&         ,"F: STRING_RESULT : " + [L]STRING_RESULT
+&         Titled "RESOLVE_PARENT_PATH"
+  Endif
+End STRING_RESULT
+#**
+#* Assert Test for Funprog RESOLVE_PARENT_PATH <br>
+#*
+#* Assert that: <br>
+#* - Given a char array of 5 elements <br>
+#* - When run GET_CHAR_ARRAY_LENGTH <br>
+#* - Then got length equals 14 by present contents <br>
+#*!
+Subprog TEST_RESOLVE_PARENT_PATH()
+  Local Char TEST_CHAR_ARRAY(255)(0..)
+  Local Char TEST_RESULT(255)
+
+  TEST_CHAR_ARRAY(0) = "A_0"
+  TEST_CHAR_ARRAY(1) = "B_1"
+  #TEST_CHAR_ARRAY(2) = "CCC_CCC2_1" : #remember to review
+  TEST_CHAR_ARRAY(2) = "C_0"
+  TEST_CHAR_ARRAY(3) = "D_1"
+  TEST_CHAR_ARRAY(4) = "E_0" # last content
+
+  [L]TEST_RESULT = func RESOLVE_PARENT_PATH(TEST_CHAR_ARRAY, 0, 4)
+  # expected .A.B(1).C.D(1)
+  If (len([L]TEST_RESULT) <> 14 or [L]TEST_RESULT <> ".A.B(1).C.D(1)" )
+    Infbox [L]TEST_RESULT
+    Errbox "TEST_RESOLVE_PARENT_PATH > TEST_LENGTH must be 14, but got:" - num$(len([L]TEST_RESULT))
+    Errbox ""+0 : # just to cash
+  Endif
+End
+
+#**
+#* Resolve the CURRENT_PROPERTY with "_" if it WAS_NEEDED_TO_REPLACE_UNDERLINE
+#*
+#* @param CURRENT_PROPERTY - Variable {Char}
+#* @param WAS_NEEDED_TO_REPLACE_UNDERLINE - Variable {Integer} - as boolean
+#* @param CURRENT_PATH_IS_ARRAY - Variable {Integer} - as boolean
+#* @param CURRENT_ARRAY_INDEX - Variable {Integer} - as index
+#*!
+Subprog SCRIPT_TO_RESOLVE_UNDERLINE(CURRENT_PROPERTY, WAS_NEEDED_TO_REPLACE_UNDERLINE, CURRENT_PATH_IS_ARRAY, CURRENT_ARRAY_INDEX)
+  Variable Char CURRENT_PROPERTY
+  Variable Integer WAS_NEEDED_TO_REPLACE_UNDERLINE
+  Variable Integer CURRENT_PATH_IS_ARRAY
+  Variable Integer CURRENT_ARRAY_INDEX
+
+
+  If(len(CURRENT_PROPERTY) > 0)
+    Local Char LEFT_STRING(len(CURRENT_PROPERTY))
+    Local Char RIGHT_STRING(len(CURRENT_PROPERTY))
+
+    WAS_NEEDED_TO_REPLACE_UNDERLINE = instr(1, CURRENT_PROPERTY,'_')
+    If(WAS_NEEDED_TO_REPLACE_UNDERLINE > 1)
+        Call SPLIT_INTO_2_STRINGS_BY_LAST_UNDERLINE(CURRENT_PROPERTY, LEFT_STRING, RIGHT_STRING)
+        CURRENT_ARRAY_INDEX = val(RIGHT_STRING)
+        CURRENT_PATH_IS_ARRAY = CURRENT_ARRAY_INDEX
+        CURRENT_PROPERTY = LEFT_STRING
+    Endif
+  Endif
+End
+
+#**
+#* Fast resolve property underline
+#*
+#* @param VAL_NAME {Char}
+#* @return RES_NAME {Char}
+#*!
+Funprog RESOLVE_PROP_UNDERLINE (VAL_NAME)
+  Value Char VAL_NAME
+  Local Char RES_NAME(255)
+  :          RES_NAME = VAL_NAME
+  Local Integer HAS_REPLACED, IS_ARRAY, ARRAY_INDEX
+  Call SCRIPT_TO_RESOLVE_UNDERLINE(RES_NAME, HAS_REPLACED, IS_ARRAY, ARRAY_INDEX)
+  RES_NAME = toupper(RES_NAME)
+  If(IS_ARRAY > 0 or ARRAY_INDEX > 0)
+    RES_NAME += '(' + num$(ARRAY_INDEX) + ')'
+  Endif
+End RES_NAME
+
+
+Subprog SPLIT_INTO_2_STRINGS_BY_LAST_UNDERLINE (VAL_NAME, LEFT_STRING, RIGHT_STRING)
+  Value Char VAL_NAME
+  Variable Char LEFT_STRING, RIGHT_STRING
+  Local Char SPLIT_OPERATOR(1), REVERSE_CHAR_ARRAY(1)(len(VAL_NAME))
+  :          SPLIT_OPERATOR = '_'
+  Local Integer I, LAST_OPERATOR_INDEX
+  For I=1 To len(VAL_NAME)
+    REVERSE_CHAR_ARRAY(len(VAL_NAME)-I) = mid$(VAL_NAME, I, 1)
+  Next I
+
+  LAST_OPERATOR_INDEX = find(SPLIT_OPERATOR, REVERSE_CHAR_ARRAY)
+
+  LEFT_STRING = seg$(VAL_NAME, 1, len(VAL_NAME) - LAST_OPERATOR_INDEX)
+  RIGHT_STRING = seg$(VAL_NAME, len(VAL_NAME) - LAST_OPERATOR_INDEX+2, len(VAL_NAME))
+End
+
+Subprog SET_CLASS_YNFEPROC_PROPERTY_VALUE()
+  #AUX=''
+  #AUX2='NFE'
+  #J = evalue ('fmet CLASS_INSTANCE'+AUX+'.ADDLINE("'+AUX2+'",[V]CST_ALASTPOS)')
+
+  #AUX='.NFE'
+  #AUX2='INFNFE'
+  #J = evalue ('fmet CLASS_INSTANCE'+AUX+'.ADDLINE("'+AUX2+'",[V]CST_ALASTPOS)')
+
+  #AUX='.NFE.INFNFE'
+  #AUX2='IDE'
+  #J = evalue ('fmet CLASS_INSTANCE'+AUX+'.ADDLINE("'+AUX2+'",[V]CST_ALASTPOS)')
+
+  #YXML.NFE.INFNFE.IDE.CUF=35
+  #YXML.NFE.INFNFE.IDE.NATOP='lucas'
+
+  #Infbox 'YXML.NFE.INFNFE.IDE.CUF'-num$(YXML.NFE.INFNFE.IDE.CUF), 'YXML.NFE.INFNFE.IDE.NATOP'-YXML.NFE.INFNFE.IDE.NATOP
+End
+
+Subprog POPULATE_CLASS(Y_CLASS, ARRAY_HIERARCHY)
+  Value Instance Y_CLASS(1..) Using C_YNFEPROC
+  Value Char ARRAY_HIERARCHY
+
+  Case ARRAY_HIERARCHY(0)
+    When 'P'
+      Local Integer I
+      # jump by item splited by ";"
+      For [L]I=0 To dim(ARRAY_HIERARCHY)
+        If len(ARRAY_HIERARCHY([L]I)) > 0
+          # se for a última propiedade, esse ï¿½ o nome
+          # If len(WORDS(I+1)) <= 0 : Call ESSE_E_O_NOME_FINAL
+          If len(WORDS([L]I+1)) <= 0
+            #Call ESSE_E_O_NOME_FINAL()
+          Else : # else : Call ESSA_E_MAIS_UMA_CLASSE(WORLDS(I),WORLDS)
+            Call POPULATE_CLASS(Y_CLASS, ARRAY_HIERARCHY)
+          Endif
+        Else
+          Break : # Break when finish the line
+        Endif
+      Next
+    When 'A'
+      # do anything
+    When 'V':
+      #Call POPULATE_CLASS_VALUE
+    When 'C':
+      # do anything
+    When Default :
+  Endcase
+End
+
+
+
+#**
+#* Get (field name == FLDCLA) from YCLAJSON (by Ponto de entrada)
+#*
+#* @param PARENT_JSON_NAME {Char}
+#* @param CHILD_JSON_NAME {Char}
+#* @return RETORNO {Char}
+#*!
+Funprog GET_FIELD_NAME_BY_JSON(PARENT_JSON_NAME, CHILD_JSON_NAME)
+  Value Char PARENT_JSON_NAME, CHILD_JSON_NAME
+  Local Char RETORNO(64) : RETORNO=''
+
+  If clalev([F:YCLAJS00]) = 0 : Local File YCLAJSON   [F:YCLAJS00]  : Endif
+  Read [F:YCLAJS00]YCLAJS1 = toupper(PARENT_JSON_NAME);toupper(CHILD_JSON_NAME)
+
+  If fstat=0
+    RETORNO = [F:YCLAJS00]FLDCLA
+  Endif
+
+  LogicClose File [F:YCLAJS00]
+End RETORNO
+
+#**
+#* Get field CODJSON from YCLAJSON by className and fieldName
+#* (by Ponto de entrada)
+#*
+#* @param PARENT_JSON_NAME {Char}
+#* @param CHILD_JSON_NAME {Char}
+#* @return RETORNO {Char}
+#*!
+Funprog GET_FIELD_CODJSON_BY_CLASS(CLASS_NAME, FIELD_NAME)
+  Value Char CLASS_NAME, FIELD_NAME
+  Local Char RETORNO(64) : RETORNO=''
+
+  If clalev([F:YCLAJS00]) = 0 : Local File YCLAJSON   [F:YCLAJS00]  : Endif
+  Read [F:YCLAJS00]YCLAJS0 = toupper(CLASS_NAME);toupper(FIELD_NAME)
+
+  If fstat=0
+    RETORNO = [F:YCLAJS00]YCODJSON2
+  Endif
+
+  LogicClose File [F:YCLAJS00]
+End RETORNO
+
+#**
+#* Get class COD JSON from YACLASSE by className
+#* <br>
+#* (by Ponto de entrada)
+#*
+#* @param CLASS_NAME {Char}
+#* @return RETORNO {Char}
+#*!
+Funprog GET_CODJSON_BY_CLASS(CLASS_NAME)
+  Value Char CLASS_NAME
+  Local Char RETORNO(64) : RETORNO=''
+
+  If clalev([F:YCLA00]) = 0 : Local File YACLASSE   [F:YCLA00]  : Endif
+
+  Read [F:YCLA00]YACLA0 = CLASS_NAME
+  If fstat=0
+    RETORNO = [F:YCLA00]YCODJSON
+  Endif
+
+  LogicClose File [F:YCLA00]
+End RETORNO
+
+#**
+#* Get classProperty Data(fieldName, fieldLinkedClass, fieldType)
+#* by parentJsonName and fieldJsonName
+#* <br>
+#* Using YCLAJSON
+#*
+#* @param PARENT_JSON_NAME {Char}
+#* @param FIELD_JSON_NAME {Char}
+#* @param RESULT_FIELD_NAME {Char} - Variable
+#* @param RESULT_FIELD_LINKED_CLASS {Char} - Variable (IF EXIST)
+#* @param RESULT_FIELD_TYPE {Integer} - Variable
+#*
+#* @return <pre> STATUS - {Integer}
+#*    <b>OK (0)</b>
+#*    <b>NOT_OK (1+)</b>
+#* </pre>
+#*!
+Funprog GET_CLASS_PROPERTY_DATA_BY_JSON(PARENT_JSON_NAME, FIELD_JSON_NAME
+&                                      ,RESULT_FIELD_NAME
+&                                      ,RESULT_FIELD_LINKED_CLASS
+&                                      ,RESULT_FIELD_TYPE)
+
+  #param
+  Value Char PARENT_JSON_NAME, FIELD_JSON_NAME
+  Variable Char RESULT_FIELD_NAME, RESULT_FIELD_LINKED_CLASS
+  Variable Integer RESULT_FIELD_TYPE
+
+  #local
+  Local Integer RES_STATUS, RES_OK, RES_NOT_OK
+  :             [L]RES_OK = 0
+  :             [L]RES_NOT_OK = RES_OK + 1
+  :             [L]RES_STATUS = RES_OK : # starts with ok
+
+  If clalev([F:YCLAJS00]) = 0 : Local File YCLAJSON   [F:YCLAJS00]  : Endif
+  Read [F:YCLAJS00]YCLAJS1 = toupper(PARENT_JSON_NAME);toupper(FIELD_JSON_NAME)
+#  Infbox "ok", toupper(PARENT_JSON_NAME)+toupper(FIELD_JSON_NAME), [F:YCLAJS00]FLDCLA
+  If fstat=0
+    RESULT_FIELD_NAME = [F:YCLAJS00]FLDCLA
+    RESULT_FIELD_LINKED_CLASS = [F:YCLAJS00]LNKCLA
+    RESULT_FIELD_TYPE = [F:YCLAJS00]TYPTYP
+  Else
+    Errbox "not ok"
+    RES_STATUS = [L]RES_NOT_OK : # status error
+  Endif
+
+  LogicClose File [F:YCLAJS00]
+End RES_STATUS
+
+#**
+#* Get className
+#* by parentJsonName and fieldJsonName
+#* <br>
+#* Using YCLAJSON
+#*
+#* @param PARENT_JSON_NAME {Char}
+#* @param FIELD_JSON_NAME {Char}
+#*
+#* @return CLASS_NAME {Char} - if not exist ''
+#*!
+Funprog GET_CLASS_NAME_BY_JSON(PARENT_JSON_NAME, FIELD_JSON_NAME)
+  #param
+  Value Char PARENT_JSON_NAME, FIELD_JSON_NAME
+  #local
+  Local Char RES_CLASS_NAME(64)
+
+  If clalev([F:YCLAJS00]) = 0 : Local File YCLAJSON [F:YCLAJS00]  : Endif
+  Read [F:YCLAJS00]YCLAJS1 = toupper(PARENT_JSON_NAME);toupper(FIELD_JSON_NAME)
+
+  If fstat=0
+    RES_CLASS_NAME = [F:YCLAJS00]LNKCLA
+  Else
+    RES_CLASS_NAME = '' # empty
+  Endif
+
+  LogicClose File [F:YCLAJS00]
+End RES_CLASS_NAME
+
+
+#**
+#* Get jsonProperty Data(fieldJsonName, parentJsonName, fieldType)
+#* <br>
+#* Using YCLAJSON
+#*
+#* @param CLASS_NAME {Char}
+#* @param FIELD_NAME {Char}
+#* @param RESULT_FIELD_JSON_NAME {Char} - Variable
+#* @param RESULT_PARENT_JSON_NAME {Char} - Variable
+#* @param RESULT_FIELD_TYPE {Integer} - Variable
+#*
+#* @return <pre> STATUS - {Integer}
+#*    <b>OK (0)</b>
+#*    <b>NOT_OK (1+)</b>
+#* </pre>
+#*!
+Funprog GET_JSON_PROPERTY_DATA_BY_CLASS(CLASS_NAME, FIELD_NAME
+&                                      ,RESULT_FIELD_JSON_NAME
+&                                      ,RESULT_PARENT_JSON_NAME
+&                                      ,RESULT_FIELD_TYPE)
+
+  #param
+  Value Char CLASS_NAME, FIELD_NAME
+  Variable Char RESULT_PARENT_JSON_NAME, RESULT_FIELD_JSON_NAME
+  Variable Integer RESULT_FIELD_TYPE
+
+  #local
+  Local Integer RES_STATUS, RES_OK, RES_NOT_OK
+  :             [L]RES_OK = 0
+  :             [L]RES_NOT_OK = 1
+  :             [L]RES_STATUS = RES_OK : # starts with ok
+
+  If clalev([F:YCLAJS00]) = 0 : Local File YCLAJSON   [F:YCLAJS00]  : Endif
+  Read [F:YCLAJS00]YCLAJS0 = toupper(CLASS_NAME);toupper(FIELD_NAME)
+
+  If fstat=0
+    RESULT_FIELD_JSON_NAME = [F:YCLAJS00]YCODJSON2
+    RESULT_PARENT_JSON_NAME = [F:YCLAJS00]YCODJSON
+    RESULT_FIELD_TYPE = [F:YCLAJS00]TYPTYP
+  Else
+    RES_STATUS = [L]RES_NOT_OK : # status error
+  Endif
+
+  LogicClose File [F:YCLAJS00]
+End RES_STATUS
+
+
+#*
+#* ------------------------------------------------------------------------
+#* ------------------------------------------------------------------------
+#*                            UTILS
+#* ------------------------------------------------------------------------
+#* ------------------------------------------------------------------------
+#*!
+
+
+
+#**
+#* Obtem os comprimento de um array de index identemidado,
+#* inferindo o ultimo elemento com conteudo como o final.
+#*
+#* @param CHAR_ARRAY - {Char(N)(0..)} - Char array starting with 0
+#*!
+Funprog GET_CHAR_ARRAY_LENGTH(CHAR_ARRAY)
+  Variable Char CHAR_ARRAY()(0..)
+  Local Integer NUM_COUNT : [L]NUM_COUNT = 0
+  Local Integer MAX_SIZE : MAX_SIZE = maxtab(CHAR_ARRAY) -1
+  Local Integer I
+
+  For I = 0 To MAX_SIZE
+    If len(CHAR_ARRAY(I)) > 0 : # se a dimensao que possue conteudo
+      [L]NUM_COUNT += 1 # adiciona contador
+    Elsif ([L]I < (MAX_SIZE + 1) and len(CHAR_ARRAY([L] I + 1)) > 0)
+      # caso o index atual nao tenha dados, mas o proximo tenha
+      # caso de conteudo com espaco em branco no meio
+      # só segue
+    Else : # se não, infere que a linha acabou
+      Break : # Break when finish the line
+    Endif
+  Next
+End [L]NUM_COUNT
+#**
+#* Assert Test for Funprog GET_CHAR_ARRAY_LENGTH <br>
+#*
+#* Assert that: <br>
+#* - Given a char array of 7 elements <br>
+#* - When run GET_CHAR_ARRAY_LENGTH <br>
+#* - Then got length equals 5 by present contents <br>
+#*!
+Subprog TEST_GET_CHAR_ARRAY_LENGTH()
+  Local Char TEST_CHAR_ARRAY(255)(0..)
+  TEST_CHAR_ARRAY(0) = "A"
+  TEST_CHAR_ARRAY(1) = "2"
+  TEST_CHAR_ARRAY(2) = "C"
+  TEST_CHAR_ARRAY(3) = "4"
+  TEST_CHAR_ARRAY(4) = "D" # last content
+  TEST_CHAR_ARRAY(5) = ""
+  TEST_CHAR_ARRAY(6) = ""
+  TEST_CHAR_ARRAY(7) = ""
+  TEST_CHAR_ARRAY(8) = ""
+
+#  Infbox "maxtab="+num$(maxtab(TEST_CHAR_ARRAY)),"GET_CHAR_ARRAY_LENGTH=" +num$(func GET_CHAR_ARRAY_LENGTH([L]TEST_CHAR_ARRAY))
+
+  Local Integer TEST_LENGTH : [L]TEST_LENGTH = func GET_CHAR_ARRAY_LENGTH([L]TEST_CHAR_ARRAY)
+  #Infbox "Result:" - num$(TEST_LENGTH)
+  If ([L]TEST_LENGTH <> 5)
+    Errbox "ERROR => TEST_GET_CHAR_ARRAY_LENGTH => TEST_LENGTH must be 5, but got:" - num$([L]TEST_LENGTH)
+    Errbox ""+0 : # just to cash
+  Endif
+End
+
+
+#**
+#* Print all char array dim
+#* @param CHAR_ARRAY {Char()(0..)}
+#*!
+Subprog PRINT_CHAR_ARRAY(CHAR_ARRAY)
+  Variable Char CHAR_ARRAY()(0..)
+  Local Integer I
+  For I = 0 To dim(CHAR_ARRAY) -1
+   Infbox " - MAX_SIZE(" + num$(dim(CHAR_ARRAY)) + ")"
+&        + chr$(10) + " - CHAR_I(" + num$(I) + ")"
+&        + chr$(10) + " - VALUE(" + CHAR_ARRAY(I) + ")"
+&        + chr$(10) + " - CHAR_LEN(" + num$(len(CHAR_ARRAY(I))) + ")"
+  Next
+End
+
+
+
+#**
+#* Obtem Char(max 255) concatenada com elementos do Char ARRAY
+#*
+#* @param CHAR_ARRAY - {char(N)(0..)} - Char Array Indefinido
+#*!
+Funprog CONCAT_CHAR_ARRAY_255 (CHAR_ARRAY)
+  Variable Char CHAR_ARRAY()(0..)
+
+  Local Integer I
+  Local Char CHAR_CONCAT(255)
+
+  #Infbox "dim:"- num$(dim(CHAR_ARRAY))  Titled "CONCAT_CHAR_ARRAY_255"
+  #
+  # Calc ARRAY_LENGTH
+  Local Integer ARRAY_LENGTH : [L]ARRAY_LENGTH = maxtab(CHAR_ARRAY) -1 :#func GET_CHAR_ARRAY_LENGTH(CHAR_ARRAY)
+#  Local Integer ARRAY_LENGTH : [L]ARRAY_LENGTH = 0
+#  Local Integer MAX_SIZE : MAX_SIZE = dim(CHAR_ARRAY) -1
+#
+#  For [L]I = 0 To [L]MAX_SIZE
+#    If len(CHAR_ARRAY(I)) > 0 :
+#      [L]ARRAY_LENGTH += 1 # adiciona contador
+#    Elsif ([L]I < (MAX_SIZE) and len(CHAR_ARRAY([L] I + 1)) > 0)
+#      # só segue
+#    Else : Break : Endif
+#  Next
+  #Infbox "length:" - num$([L]ARRAY_LENGTH) Titled "CONCAT_CHAR_ARRAY_255"
+  # ARRAY_LENGTH correto
+  #
+
+  For I=0 To ARRAY_LENGTH
+    If ((len(CHAR_ARRAY(I)) > 0) & ((len(CHAR_CONCAT) + len(CHAR_ARRAY(I))) <= 255))
+      If(len(CHAR_CONCAT) > 0)
+        CHAR_CONCAT += ";"
+      Endif
+      CHAR_CONCAT += CHAR_ARRAY(I)
+    Else
+      Break
+    Endif
+  Next
+End CHAR_CONCAT
+
+
+#**
+#* Copia um array de caracteres
+#*
+#* @param CHAR_ARRAY {Chat()(0..)}
+#* @param RESULT_ARRAY {Chat()(0..)}
+#* @param INITIAL_INDEX {Integer}
+#* @param FINAL_INDEX {Integer}
+#*!
+Subprog COPY_CHAR_ARRAY(CHAR_ARRAY, RESULT_ARRAY, INITIAL_INDEX, FINAL_INDEX)
+  Variable Char CHAR_ARRAY()(0..)
+  Variable Char RESULT_ARRAY()(0..)
+  Value Integer INITIAL_INDEX
+  Value Integer FINAL_INDEX
+
+  Local Integer I, J, NEW_SIZE
+  #[L]NEW_SIZE = (FINAL_INDEX - INITIAL_INDEX)
+  #Infbox "[L]NEW_SIZE("+num$([L]NEW_SIZE)+"); FINAL_INDEX("+num$([L]FINAL_INDEX)+"); INITIAL_INDEX("+num$([L]INITIAL_INDEX)+");" Titled "COPY_CHAR_ARRAY"
+
+  I=0
+  For J = INITIAL_INDEX To FINAL_INDEX
+    RESULT_ARRAY(I) = CHAR_ARRAY(J)
+    #Infbox num$(I) +") == "+ (RESULT_ARRAY(I)) + " == " + CHAR_ARRAY(J) Titled "COPY_CHAR_ARRAY"
+    I+=1
+  Next J
+End
+
+#**
+#*
+#*
+#* @param ARRAY_A
+#* @param ARRAY_B
+#* @return RES_STATUS {Integer} - <pre>
+#*    <b>== 0 - equals</b>
+#*    <b><> 0 - not equals</b> {
+#*        >=  1 - bigger than
+#*        <= -1 - small than
+#*    }
+#* </pre>
+#*!
+Funprog COMPARE_CHAR_ARRAYS(ARRAY_A, ARRAY_B)
+  Variable Char ARRAY_A()(0..), ARRAY_B()(0..)
+  Local Integer RES_STATUS
+
+  If(RES_STATUS = 0): RES_STATUS = maxtab(ARRAY_A) - maxtab(ARRAY_B) :Endif
+  If(RES_STATUS = 0): RES_STATUS = dim(ARRAY_A) - dim(ARRAY_B)       :Endif
+  If(RES_STATUS = 0)
+    Local Char STRING_A(255), STRING_B(255)
+    STRING_A = func CONCAT_CHAR_ARRAY_255(ARRAY_A)
+    STRING_B = func CONCAT_CHAR_ARRAY_255(ARRAY_B)
+    RES_STATUS = len(STRING_A) - len(STRING_B)
+  Endif
+End RES_STATUS
+
+#**
+#* Save a clob
+#* @param STRING_PATH {Char}
+#* @param CLOB_VAR {Clbfile}
+#*
+#* @return RES_STATUS == <b>fstat</b> : <pre>
+#* <b>Note that the use of literal numbers should be avoided: dedicated constants exist for this purpose.</b>
+#*
+#* <b>
+#* Constant             Value   Explanation</b>
+#* [V]CST_AOK           0       Operation succeeded.
+#* [V]CST_ALOCK         1       Record is locked.
+#* [V]CST_AOUTSEARCH    2       In <= or >= read mode, indicates that read succeeded, but the key found is not equal to the value.
+#* [V]CST_ADUPKEY       3       Duplicate value on unique index.
+#* [V]CST_AOUTKEYS      4       Attempt of reading a key value that is smaller or greater than all existing key values.
+#* [V]CST_ANOREC        5       Record not read (no current record exists).
+#* [V]CST_ARECTICKUPD   6       Update conflict: the line no longer exists with the right updtick value (concurrency error during an update operation).
+#* [V]CST_ARECTICKDEL   7       Delete conflict: The line no longer exists with the right updtick value (concurrency error during a delete operation).
+#*
+#* </pre>
+#*!
+Funprog SAVE_CLOB(STRING_PATH, CLOB_VAR)
+  Value Char STRING_PATH :# like filpath('tmp',"AutorizacaoNFe-envio", "txt")
+  Variable Clbfile CLOB_VAR
+
+  Local Integer RES_STATUS
+
+  Openo STRING_PATH , 0
+    Wrseq CLOB_VAR
+    RES_STATUS = fstat
+  Openo
+End RES_STATUS
+
+
+#*
+#* ------------------------------------------------------------------------
+#* ------------------------------------------------------------------------
+#*                            Examples
+#* ------------------------------------------------------------------------
+#* ------------------------------------------------------------------------
+#*!
+
+$EXAMPLE_BRUNO_E_MARCELO
+  # Get path of Sage X3 client directory on client workstation
+  #Infbox filpath("!", "", "", "", "", "#") :# Hash symnol represents client
+
+  # Getting file information
+  # filinfo(<Filename>, <Property_Num>)
+
+  # get file size
+  #Local Integer SIZE : [L]SIZE = filinfo(filpath("FIL", "BPCUSTOMER", "fde"), 7)
+  #If [L]SIZE < 0 : # File does not exist
+  #  Infbox "File does not exist"
+  #Endif
+
+  #Assign classe_aux2 with valor_prop
+Return
+
+#**
+#* Teste com a classe YDE2
+#*!
+$EXAMPLE_YDE2
+  Local Instance Y_OBJ_IDE_2 Using C_YIDE2
+  Y_OBJ_IDE_2 = NewInstance  C_YIDE2 AllocGroup null
+
+  If(Y_OBJ_IDE_2 <> null) : Infbox "Y_OBJ_IDE_2 existe" : Endif
+
+  Local Char Y_PROPERTY_NAME(255) : [L]Y_PROPERTY_NAME="SE_DTPRESTSE"
+  Local Char Y_PROPERTY_VALUE(255) : [L]Y_PROPERTY_VALUE="22/09/2021"
+
+  ERR = evalue('fmet [L]Y_OBJ_IDE_2.SET_PROPERTY([L]Y_PROPERTY_NAME,[L]Y_PROPERTY_VALUE)')
+  If not ERR
+    Infbox "not err"
+  Else
+    Infbox "err"
+  Endif
+  Infbox num$(evalue('[L]Y_OBJ_IDE_2.'+Y_PROPERTY_NAME)) Titled 'VALU'
+
+  Infbox chr$(10) - 'Y_PROPERTY_NAME:' + Y_PROPERTY_NAME
+&       +chr$(10) - 'Y_PROPERTY_VALUE:' + Y_PROPERTY_VALUE
+
+Return
+
+#**
+#* Testes de métodos para extrair jsonName, fieldName e fieldType
+#*!
+$EXAMPLE_YACLASSE
+  Local Integer RESULT_FIELD_TYPE, HAS_ERROR
+  Local Char RESULT_FIELD_JSON_NAME(64), RESULT_PARENT_JSON_NAME(64)
+  Local Char RESULT_FIELD_NAME(64), RESULT_FIELD_LINKED_CLASS(64)
+
+  Infbox '("nfeProc", "nfe") =' + func GET_FIELD_NAME_BY_JSON("NFEPROC", "NFE") Titled "GET_FIELD_NAME_BY_JSON"
+  Infbox '("YIDE", "CUF") ='     + func GET_FIELD_CODJSON_BY_CLASS("YIDE", "CUF") Titled "GET_FIELD_CODJSON_BY_CLASS"
+  Infbox '("YINFNFE")='         + func GET_CODJSON_BY_CLASS("YINFNFE") Titled "GET_CODJSON_BY_CLASS"
+
+
+  HAS_ERROR = func GET_CLASS_PROPERTY_DATA_BY_JSON("nfeProc", "nfe"
+&                                                 , RESULT_FIELD_NAME
+&                                                 , RESULT_FIELD_LINKED_CLASS
+&                                                 , RESULT_FIELD_TYPE)
+
+  If not HAS_ERROR
+    Infbox '("nfeProc","nfe") =', RESULT_FIELD_NAME
+&                               , RESULT_FIELD_LINKED_CLASS
+&                               , num$(RESULT_FIELD_TYPE)
+&          Titled 'GET_CLASS_PROPERTY_DATA_BY_JSON'
+  Else
+    Errbox '("nfeProc","nfe") = HAS_ERROR' Titled 'GET_CLASS_PROPERTY_DATA_BY_JSON'
+  Endif
+
+  HAS_ERROR = func GET_JSON_PROPERTY_DATA_BY_CLASS("YPROD", "RASTRO"
+&                                                 , RESULT_FIELD_JSON_NAME
+&                                                 , RESULT_PARENT_JSON_NAME
+&                                                 , RESULT_FIELD_TYPE)
+  If not HAS_ERROR
+    Infbox '("YPROD", "RASTRO") =', RESULT_FIELD_NAME
+&                                 , RESULT_FIELD_LINKED_CLASS
+&                                 , num$(RESULT_FIELD_TYPE)
+&          Titled 'GET_CLASS_PROPERTY_DATA_BY_JSON'
+  Else
+    Errbox '("YPROD", "RASTRO") = HAS_ERROR' Titled 'GET_CLASS_PROPERTY_DATA_BY_JSON'
+  Endif
+Resume
+
+#**
+#* Exemplo de chamada node js
+#*
+#*
+#* <br><b>EXEC_JS DOC</b><br>
+#*
+#* <br>This Sub program is working on Fusion Session Client AND Syracuse Session Client
+#* <br>It permit to execute allowed javascript function from syracuse server.
+#*
+#* @param MODULE : Char : A Node.js module's path.
+#* @param FONCTION : Char : A Javascript function name.
+#* @param MODE : Char : A mode to determine if the call is synchronous or asynchronous ('sync' or 'wait').
+#* @param ARGUMENTS : Clbfile : Multiple arguments delimited by ',' ; It can be JSON format or every types.
+#* @param ENCODINGS : Char : Specify the needs to encode each argument to base64 or not. Can be '0' or '1'
+#*               Each value must be delimited by ','.
+#* @param CALLBACKINDEX : Integer : Specify the location of callback function. This is needed only for 'wait' mode.
+#*                   '-1' is the value to say that the callback location is the last parameter.
+#* @param RETURNS : Char : Used to filter JSON Objects if you don't want all object properties or
+#*                    if the object contains circular references.
+#* @param RETURNS_ENC : Char : Specify the needs to encode the response to base64 or not. Can be '0' or '1'
+#*
+#* @param RESHEAD : Clbfile : The response header.
+#* @param RESBODY : Clbfile : The Response body.
+#* @return STATUSCODE : Integer : The status code return by the javascript runner module.
+#*!
+$EXAMPLE_NODE
+
+  Local Clbfile FILE_XML(6)
+  Append [L]FILE_XML, '<resNFe xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" versao="1.01" xmlns="http://www.portalfiscal.inf.br/nfe">'
+  Append [L]FILE_XML, '  <chNFe>000000000000000000000000000000000000000000000000000001</chNFe>'
+  Append [L]FILE_XML, '  <CNPJ>00000000000001</CNPJ>'
+  Append [L]FILE_XML, '  <xNome>TESTE MIDDLEWARE-NFE OTTECH</xNome>'
+  Append [L]FILE_XML, '  <IE>000000000001</IE>'
+  Append [L]FILE_XML, '  <dhEmi>2021-07-13T12:07:30-03:00</dhEmi>'
+  Append [L]FILE_XML, '  <tpNF>1</tpNF>'
+  Append [L]FILE_XML, '  <vNF>00.01</vNF>'
+  Append [L]FILE_XML, '  <digVal>tn0B+DaWMiBeHotp5t6ZNOAWzXU=</digVal>'
+  Append [L]FILE_XML, '  <dhRecbto>2021-07-13T12:13:01-03:00</dhRecbto>'
+  Append [L]FILE_XML, '  <nProt>000000000000001</nProt>'
+  Append [L]FILE_XML, '  <cSitNFe>1</cSitNFe>'
+  Append [L]FILE_XML, '</resNFe>'
+
+  Local Char MODULE(32)
+  Local Char FUNCTION(32)
+  Local Char MODE(4)
+  Local Clbfile ARGUMENTS
+  Local Char ENCODINGS(10)
+  Local Integer CALLBACKINDEX
+  Local Char RETURNS(1)
+  Local Char RETURNS_ENC(1)
+  Local Clbfile RESHEAD :#variable
+  Local Clbfile RESBODY :#variable
+
+  Local Integer STATUSCODE
+
+  [L]MODULE                 = 'xqbr-xml2json'
+  [L]FUNCTION               = 'xml2json'
+  [L]MODE                   = 'sync'
+  Infbox [L]FILE_XML  Titled  'FILE_XML'
+  Append [L]ARGUMENTS,        '"","' + escJson(FILE_XML) + '"'
+  Infbox [L]ARGUMENTS Titled  'EXEC_HTTP'
+  [L]ENCODINGS              = ''
+  [L]CALLBACKINDEX          = 0
+  [L]RETURNS                = ''
+  [L]RETURNS_ENC            = ''
+
+
+  [L]STATUSCODE = func ASYRWEBSER.EXEC_JS([L]MODULE
+&                                        ,[L]FUNCTION
+&                                        ,[L]MODE
+&                                        ,[L]ARGUMENTS
+&                                        ,[L]ENCODINGS
+&                                        ,[L]CALLBACKINDEX
+&                                        ,[L]RETURNS
+&                                        ,[L]RETURNS_ENC
+&                                        ,[L]RESHEAD
+&                                        ,[L]RESBODY)
+
+  Local Integer  STAT
+  Local Char FILE_PATH(255)
+
+  FILE_PATH  = filpath('tmp',"RESHEAD", "json")         :#PATH
+  Openo FILE_PATH , 0 : Wrseq RESHEAD : Openo           :#Save
+
+  Infbox 'status=' + num$(STATUSCODE), [L]RESHEAD Titled 'RESHEAD'
+  Call COPCLI (FILE_PATH, FILE_PATH, STAT) From ORDSYS  :#FAZER DOWNLOAD DO ARQUIVO SALVO
+
+
+  FILE_PATH  = filpath('tmp',"RESBODY", "json")         :#PATH
+  Openo FILE_PATH , 0 : Wrseq RESBODY : Openo           :#Save
+
+  Infbox 'status=' + num$(STATUSCODE), RESBODY Titled 'RESBODY'
+  Call COPCLI (FILE_PATH, FILE_PATH, STAT) From ORDSYS  :#FAZER DOWNLOAD DO ARQUIVO SALVO
+
+Return
+
+Funprog BANKSLIP(BANKSLIP64, PATH, BANKSLIPNAME)
+  Const Clbfile BANKSLIP64
+  Value Char PATH()
+  Const Char BANKSLIPNAME
+
+  Local Char MODULE(9), MODE(4), FUNCTION(20)
+  Local Clbfile ARGUMENTS
+  Local Clbfile RESBODY, RESHEAD
+  Local Integer STATUSCODE, RET
+
+  Case GOS(1)
+    When "dos"   : DIRSEP="\"
+    When Default : DIRSEP="/"
+  Endcase
+
+  [L]MODULE     = 'xqbr_util'
+  [L]FUNCTION   = 'base64ToFile'
+  [L]MODE       = 'wait'
+
+  Append [L]ARGUMENTS,'"'+escJson(PATH)+'/'+[L]BANKSLIPNAME+'.pdf"'+',"' + BANKSLIP64 + '"'
+
+  [L]STATUSCODE = func ASYRWEBSER.EXEC_JS([L]MODULE, [L]FUNCTION, [L]MODE, [L]ARGUMENTS, "", 0, "", "", [L]RESHEAD, [L]RESBODY)
+End [L]STATUSCODE
+
+
+$EXAMPLE_NODE_XML
+
+  Local Clbfile FILE_XML(6)
+  Append [L]FILE_XML, '<resNFe xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" versao="1.01" xmlns="http://www.portalfiscal.inf.br/nfe">'
+  Append [L]FILE_XML, '  <chNFe>000000000000000000000000000000000000000000000000000001</chNFe>'
+  Append [L]FILE_XML, '  <CNPJ>00000000000001</CNPJ>'
+  Append [L]FILE_XML, '  <xNome>TESTE MIDDLEWARE-NFE OTTECH</xNome>'
+  Append [L]FILE_XML, '  <IE>000000000001</IE>'
+  Append [L]FILE_XML, '  <dhEmi>2021-07-13T12:07:30-03:00</dhEmi>'
+  Append [L]FILE_XML, '  <tpNF>1</tpNF>'
+  Append [L]FILE_XML, '  <vNF>00.01</vNF>'
+  Append [L]FILE_XML, '  <digVal>tn0B+DaWMiBeHotp5t6ZNOAWzXU=</digVal>'
+  Append [L]FILE_XML, '  <dhRecbto>2021-07-13T12:13:01-03:00</dhRecbto>'
+  Append [L]FILE_XML, '  <nProt>000000000000001</nProt>'
+  Append [L]FILE_XML, '  <cSitNFe>1</cSitNFe>'
+  Append [L]FILE_XML, '</resNFe>'
+
+  Local Char MODULE(32)
+  Local Char FUNCTION(32)
+  Local Char MODE(4)
+  Local Clbfile ARGUMENTS
+  Local Char ENCODINGS(10)
+  Local Integer CALLBACKINDEX
+  Local Char RETURNS(1)
+  Local Char RETURNS_ENC(1)
+  Local Clbfile RESHEAD :#variable
+  Local Clbfile RESBODY :#variable
+
+  Local Char PATH_RESULT(255): PATH_RESULT = filpath('tmp',"-RESULT-EXAMPLE_NODE_XML", "txt")
+  Local Integer STATUSCODE
+  Local Integer  STAT,STAT2,STAT3,STAT0
+  #Call SYSTEME (adxmac(1), 'ae_rm '+PATH_RESULT,'', STAT0) From ORDSYS
+
+#FILE_XML='<ABC version="v1"><test>ABC</test><nItem>2</nItem></ABC>'
+
+  [L]MODULE                 = 'xqbr-x3csv'
+  [L]FUNCTION               = 'xqbr_xml2X3CsvAsyncPath'
+  [L]MODE                   = 'wait'
+  Infbox [L]FILE_XML  Titled  'FILE_XML'
+  Append [L]ARGUMENTS,        '"' + escJson(FILE_XML) + '","'+escJson(PATH_RESULT)+'"'
+  Infbox [L]ARGUMENTS Titled  'EXEC_HTTP'
+  [L]ENCODINGS              = ''
+  [L]CALLBACKINDEX          = 0
+  [L]RETURNS                = ''
+  [L]RETURNS_ENC            = ''
+
+
+  [L]STATUSCODE = func ASYRWEBSER.EXEC_JS([L]MODULE,[L]FUNCTION,[L]MODE,[L]ARGUMENTS,[L]ENCODINGS,[L]CALLBACKINDEX,[L]RETURNS,[L]RETURNS_ENC, [L]RESHEAD,[L]RESBODY)
+infbox 'exe'
+
+  Local Char FILE_PATH(255)
+
+  FILE_PATH  = filpath('tmp',"RESHEAD", "txt")         :#PATH
+  Openo FILE_PATH , 0 : Wrseq RESHEAD : Openo           :#Save
+
+  #Call COPCLI (FILE_PATH, FILE_PATH, STAT) From ORDSYS  :#FAZER DOWNLOAD DO ARQUIVO SALVO
+  #Infbox 'status=' + num$(STATUSCODE), [L]RESHEAD Titled 'RESHEAD'
+
+
+  FILE_PATH  = filpath('tmp',"RESBODY", "txt")         :#PATH
+  Openo FILE_PATH , 0 : Wrseq RESBODY : Openo           :#Save
+
+  #Call COPCLI (FILE_PATH, FILE_PATH, STAT2) From ORDSYS  :#FAZER DOWNLOAD DO ARQUIVO SALVO
+  #Infbox 'status=' + num$(STATUSCODE), RESBODY Titled 'RESBODY'
+  Call COPCLI (PATH_RESULT, PATH_RESULT, STAT3) From ORDSYS  :#FAZER DOWNLOAD DO ARQUIVO SALVO
+  Infbox 'status=' + num$(STATUSCODE), RESBODY Titled 'RESBODY'
+
+Return
+
+#*
+#* ------------------------------------------------------------------------
+#* ------------------------------------------------------------------------
+#*                            DEPRECATED
+#* ------------------------------------------------------------------------
+#* ------------------------------------------------------------------------
+#*!
+
+#** @deprecated
+#*
+#* @return {Char}
+#*!
+Funprog GET_XML_RESUMIDO_MOCK()
+  Local Clbfile  FILE_CONTENT
+  [L]FILE_CONTENT += 'A;RESNFE;XMLNS:XSD'
+  [L]FILE_CONTENT += 'V;"http://www.w3.org/2001/XMLSchema"'
+  [L]FILE_CONTENT += 'A;RESNFE;XMLNS:XSI'
+  [L]FILE_CONTENT += 'V;"http://www.w3.org/2001/XMLSchema-instance"'
+  [L]FILE_CONTENT += 'A;RESNFE;VERSAO'
+  [L]FILE_CONTENT += 'V;"1.01"'
+  [L]FILE_CONTENT += 'A;RESNFE;XMLNS'
+  [L]FILE_CONTENT += 'V;"http://www.portalfiscal.inf.br/nfe"'
+  [L]FILE_CONTENT += 'P;RESNFE;CHNFE_0'
+  [L]FILE_CONTENT += 'V;"000000000000000000000000000000000000000000000000000001"'
+  [L]FILE_CONTENT += 'P;RESNFE;CNPJ_0'
+  [L]FILE_CONTENT += 'V;"00000000000001"'
+  [L]FILE_CONTENT += 'P;RESNFE;XNOME_0'
+  [L]FILE_CONTENT += 'V;"TESTE MIDDLEWARE-NFE OTTECH"'
+  [L]FILE_CONTENT += 'P;RESNFE;IE_0'
+  [L]FILE_CONTENT += 'V;"000000000001"'
+  [L]FILE_CONTENT += 'P;RESNFE;DHEMI_0'
+  [L]FILE_CONTENT += 'V;"2021-07-13T12:07:30-03:00"'
+  [L]FILE_CONTENT += 'P;RESNFE;TPNF_0'
+  [L]FILE_CONTENT += 'V;"1"'
+  [L]FILE_CONTENT += 'P;RESNFE;VNF_0'
+  [L]FILE_CONTENT += 'V;"00.01"'
+  [L]FILE_CONTENT += 'P;RESNFE;DIGVAL_0'
+  [L]FILE_CONTENT += 'V;"tn0B+DaWMiBeHotp5t6ZNOAWzXU="'
+  [L]FILE_CONTENT += 'P;RESNFE;DHRECBTO_0'
+  [L]FILE_CONTENT += 'V;"2021-07-13T12:13:01-03:00"'
+  [L]FILE_CONTENT += 'P;RESNFE;NPROT_0'
+  [L]FILE_CONTENT += 'V;"000000000000001"'
+  [L]FILE_CONTENT += 'P;RESNFE;CSITNFE_0'
+  [L]FILE_CONTENT += 'V;"1"'
+End [L]FILE_CONTENT
+
+
+#** @deprecated
+#*
+#* @param FILE_PATH {Char}
+#* @param FILE_NAME {Char}
+#* @param FILE_CONTENT {Clbfile}
+#*!
+Subprog CREATE_XML_FILE_IF_NOT_EXIST(FILE_PATH, FILE_CONTENT)
+  Value Char FILE_PATH
+  Value Clbfile FILE_CONTENT
+
+  Local Integer FILE_SIZE_BYTES : [L]FILE_SIZE_BYTES = filinfo(FILE_PATH,7)
+  #If [L]FILE_SIZE_BYTES < 0 : # File does not exist
+  #  Infbox FILE_PATH + " Not exists"
+    Openio FILE_PATH #, -1
+      # let's write a clob in a file (in UTF8)
+      #adxium=0 : # UTF8
+      Wrseq FILE_CONTENT : # The exact size of the blob will be written
+    Openio
+  #Else
+  #  Infbox FILE_PATH + " Exists"
+  #Endif
+End

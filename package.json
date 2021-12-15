@@ -11,7 +11,7 @@
   "scripts": {
     "testLib": "nodeunit ./tests/*test.js && nodeunit ./tests/boleto/bancos/*test.js && nodeunit ./tests/boleto/*test.js",
     "lint": "eslint .",
-    "test":"node ./tests/index.test.js",
+    "test": "node ./tests/index.test.js",
     "gerarBradesco": "node ./examples/gerar-boleto-bradesco.js",
     "gerarCecred": "node ./examples/gerar-boleto-cecred.js",
     "gerarBrasil": "node ./examples/gerar-boleto-BancoDoBrasil.js"
