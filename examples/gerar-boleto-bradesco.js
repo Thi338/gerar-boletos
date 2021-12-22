@@ -3,45 +3,45 @@ const { Bancos, Boletos, streamToPromise } = require('../lib/index');
 const boleto = {
   banco: new Bancos.Bradesco(),
   pagador: {
-    nome: 'José Bonifácio de Andrada',
-    RegistroNacional: '12345678',
+    nome: 'Gabriel Albejante Pitta',
+    RegistroNacional: '',
     endereco: {
-      logradouro: 'Rua Pedro Lessa, 15',
+      logradouro: 'Praça Floriano Peixoto, 9',
       bairro: 'Centro',
-      cidade: 'Rio de Janeiro',
-      estadoUF: 'RJ',
-      cep: '20030-030'
+      cidade: 'Mogi Mirim',
+      estadoUF: 'SP',
+      cep: '13800187'
     }
   },
-  instrucoes: ['Após o vencimento Mora dia R$ 1,59', 'Após o vencimento, multa de 2%'],
+  instrucoes: ['PROTESTAR NO 5º DIA APÓS O VENCIMENTO.', 'JUROS DE 1,5% A.M E MULTA DE 1,5%'],
   beneficiario: {
-    nome: 'Empresa Fictícia LTDA',
-    cnpj: '43576788000191',
+    nome: 'INCOTELA INDUTRIA E COMERCIO LTDA CNPJ: 46.086.369/0001-60',
+    cnpj: '',
     dadosBancarios: {
-      carteira: '09',
-      agencia: '0101',
-      agenciaDigito: '5',
-      conta: '0326446',
-      contaDigito: '0',
-      nossoNumero: '00000000061',
-      nossoNumeroDigito: '8'
+      carteira: '07',
+      agencia: '2117',
+      agenciaDigito: '0',
+      conta: '0012475',
+      contaDigito: '9',
+      nossoNumero: '00000010964',
+      nossoNumeroDigito: '3'
     },
     endereco: {
-      logradouro: 'Rua Pedro Lessa, 15',
+      logradouro: 'Rua Luiz Fernando Rodriguez, 2053',
       bairro: 'Centro',
-      cidade: 'Rio de Janeiro',
-      estadoUF: 'RJ',
-      cep: '20030-030'
+      cidade: 'Mogi Mirim',
+      estadoUF: 'SP',
+      cep: '13800-187'
     }
   },
   boleto: {
-    numeroDocumento: '1001',
+    numeroDocumento: '1/23675/3',
     especieDocumento: 'DM',
-    valor: 110.00,
+    valor: 1318.00,
     datas: {
-      vencimento: '02-04-2020',
-      processamento: '02-04-2019',
-      documentos: '02-04-2019'
+      vencimento: '02-15-2022',
+      processamento: '12-20-2021',
+      documentos: '12-17-2021'
     }
   }
 };

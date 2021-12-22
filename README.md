@@ -38,6 +38,13 @@ npm run gerarBradesco
 ```javascript
 npm run gerarCecred
 ```
+```javascript
+npm run gerarItau
+```
+```javascript
+npm run gerarSantander
+```
+
 
 * [pasta com arquivos de exemplo](/examples)
 

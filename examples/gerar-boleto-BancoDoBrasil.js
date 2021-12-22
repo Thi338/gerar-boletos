@@ -3,45 +3,45 @@ const { Bancos, Boletos, streamToPromise } = require('../lib/index');
 const boleto = {
   banco: new Bancos.BancoBrasil(),
   pagador: {
-    nome: 'José Bonifácio de Andrada',
-    registroNacional: '12345678',
+    nome: 'LIDER INDUSTRIA E COMERCIO DE TELAS',
+    registroNacional: '',
     endereco: {
-      logradouro: 'Rua Pedro Lessa, 15',
-      bairro: 'Centro',
-      cidade: 'Rio de Janeiro',
-      estadoUF: 'RJ',
-      cep: '20030-030'
+      logradouro: 'RODOVIA GO070, s/n',
+      bairro: 'Chacaras Helou',
+      cidade: 'Goiania',
+      estadoUF: 'GO',
+      cep: '74470450'
     }
   },
-  instrucoes: ['Após o vencimento Mora dia R$ 1,59', 'Após o vencimento, multa de 2%'],
+  
   beneficiario: {
-    nome: 'Empresa Fictícia LTDA',
-    cnpj:'43576788000191',
+    nome: 'INCOTELA INDUSTRIA E COMERCIO LTDA CNPJ 466.086.369/0001-60',
+    cnpj:'',
     dadosBancarios: {
-      carteira: '09',
-      agencia: '18455',
+      carteira: '17/019',
+      agencia: '2587',
       agenciaDigito: '4',
-      conta: '1277165',
-      contaDigito: '1',
-      nossoNumero: '00000000061',
-      nossoNumeroDigito: '8'
+      conta: '00100678',
+      contaDigito: '7',
+      nossoNumero: '30555520000000015',
+      nossoNumeroDigito: '0'
     },
     endereco: {
-      logradouro: 'Rua Pedro Lessa, 15',
-      bairro: 'Centro',
-      cidade: 'Rio de Janeiro',
-      estadoUF: 'RJ',
-      cep: '20030-030'
+      logradouro: 'Estr. Luiz Fernando Rodriguez, 2053',
+      bairro: 'Vila Boa Vista',
+      cidade: 'Campinas',
+      estadoUF: 'SP',
+      cep: '13064-798'
     }
   },
   boleto: {
-    numeroDocumento: '1001',
+    numeroDocumento: '1/14635/1',
     especieDocumento: 'DM',
-    valor: 110.00,
+    valor: 0.01,
     datas: {
-      vencimento: '02-04-2020',
-      processamento: '02-04-2019',
-      documentos: '02-04-2019'
+      vencimento: '06-12-2019',
+      processamento: '12-20-2021',
+      documentos: '05-15-2019'
     }
   }
 };
