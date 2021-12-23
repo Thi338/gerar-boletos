@@ -19,11 +19,11 @@ const boleto = {
     cnpj:'',
     dadosBancarios: {
       carteira: '17/019',
-      agencia: '2587',
-      agenciaDigito: '4',
-      conta: '00100678',
-      contaDigito: '7',
-      nossoNumero: '30555520000000015',
+      agencia: '2857',
+      agenciaDigito: '6',
+      conta: '00100687',
+      contaDigito: '8',
+      nossoNumero: '30888520000000015',
       nossoNumeroDigito: '0'
     },
     endereco: {
