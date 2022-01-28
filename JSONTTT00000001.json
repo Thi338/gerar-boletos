@@ -1,0 +1,48 @@
+{
+    "pdfPath": "/boleto", 
+    "banco": "Santander", 
+    "numdud": "3412/1", 
+    "boletoInfo": 
+{
+    "pagador": {
+        "nome": "NOME PAGADOR", 
+        "registroNacional": "REGISTRO PAGADOR", 
+        "endereco": {
+            "logradouro": "PAG_LOGRADOURO", 
+            "bairro": "PAG_BAIRRO", 
+            "cidade": "PAG_CIDADE", 
+            "estadoUF": "PAG_UF", 
+            "cep": "PAG_CEP" 
+            }
+        }, 
+        "instrucoes": ["Ap�s o vencimento juros de 0%","Ap�s o vencimento, multa de 0%"], 
+        "beneficiario": {
+            "nome": "Com�rcio ABC - 01", 
+            "cnpj": "30399154000169", 
+            "dadosBancarios": {
+                "carteira": "TTT", 
+                "agencia": "5544",
+                "agenciaDigito": "1", 
+                "conta": "1", 
+                "contaDigito": "1", 
+                "nossoNumero": "00000001",
+                "nossoNumeroDigito": "NUM" 
+                }, 
+            "endereco": {
+                "logradouro": "BEN_LOGRADOURO",
+                 "bairro": "BEN_BAIRRO",  
+                 "cidade": "BEN_CIDADE",
+                 "estadoUF": "BEN_UF","cep": "BEN_CEP" 
+                }
+            }, 
+            
+            "boleto": {
+                "numeroDocumento": "3412/1",
+                "especieDocumento": "ESP_DOC",  
+                "valor": 9000, "datas ": {
+                    "vencimento": "12-04-2021",
+                    "processamento": "01-31-2022",
+                    "documentos": "01-31-2022" }
+                    }
+                }
+            }

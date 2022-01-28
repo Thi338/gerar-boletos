@@ -1,8 +1,9 @@
 const { Bancos, Boletos, streamToPromise } = require('../lib/index');
 
+
 const boleto = {
   banco: new Bancos.Santander(),
-  locaisPagamento: ['Pagável preferencialmente em qualquer banco Itaú.'],
+  locaisPagamento: ['ATE O VENCIMENTO, PAGAVEL PREFERENCIALMENTE NAS AGENCIAS DO BANCO EMISSOR. SUJEITO A PROTESTO APOS O VENCIMENTO.'],
   pagador: {
     nome: 'LEFOSSE ADVOGADOS',
     registroNacional: '57756694000109',
@@ -18,7 +19,7 @@ const boleto = {
   beneficiario: {
     dadosBancarios: {
         carteira: '0101',
-        agencia: '3644',
+        agencia: '3644', //3644
         agenciaDigito: '9',
         conta: '734407',
         contaDigito: '4',
